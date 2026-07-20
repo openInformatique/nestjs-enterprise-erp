@@ -1,0 +1,477 @@
+{
+  "info": {
+    "name": "ERP — 03 · Catalogue (Produits & Services)",
+    "description": "Collection du module 03 (guide mini-DEV-03).\n\n**Avant de commencer** :\n1. Renseigne la variable de collection `adminPassword` (onglet Variables).\n2. Lance « Auth / Login (admin) ».\n3. Déroule le dossier Catégories puis Produits DANS L'ORDRE : chaque création mémorise son id (`categoryId`, `subCategoryId`, `productId`) pour les requêtes suivantes.\n\nTypes d'article : `PRODUCT` (bien physique, aura du stock au module 04) et `SERVICE` (prestation, jamais de stock).\nUnités : UNIT | KG | LITER | HOUR | DAY | METER. TVA : 0, 5.5, 10 ou 20.\n\nEnveloppe de réponse : `{ success, data, meta }` — succès ; `{ success, error: { code, message }, meta }` — erreur.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{accessToken}}",
+        "type": "string"
+      }
+    ]
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:3000/api/v1",
+      "type": "string"
+    },
+    {
+      "key": "adminPassword",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "accessToken",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "categoryId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "subCategoryId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "productId",
+      "value": "",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "Auth",
+      "item": [
+        {
+          "name": "Login (admin)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const json = pm.response.json();",
+                  "if (json && json.success && json.data && json.data.accessToken) {",
+                  "    pm.collectionVariables.set('accessToken', json.data.accessToken);",
+                  "    console.log('accessToken enregistré dans les variables de collection.');",
+                  "}",
+                  "pm.test('Login réussi (200)', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"admin@local.dev\",\n  \"password\": \"{{adminPassword}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/auth/login",
+              "host": ["{{baseUrl}}"],
+              "path": ["auth", "login"]
+            },
+            "description": "Connexion. Le token d'accès (`data.accessToken`) est stocké automatiquement dans la variable `accessToken`."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Catégories",
+      "item": [
+        {
+          "name": "Lister les catégories",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/categories",
+              "host": ["{{baseUrl}}"],
+              "path": ["categories"],
+              "query": [
+                {
+                  "key": "isActive",
+                  "value": "true",
+                  "disabled": true
+                }
+              ]
+            },
+            "description": "**Accès : tout utilisateur connecté.** Liste PLATE non paginée : chaque catégorie porte son `parentId` (null = racine), c'est au consommateur de reconstituer l'arbre."
+          }
+        },
+        {
+          "name": "Créer une catégorie racine",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const json = pm.response.json();",
+                  "if (json && json.success && json.data && json.data.id) {",
+                  "    pm.collectionVariables.set('categoryId', json.data.id);",
+                  "    console.log('categoryId = ' + json.data.id);",
+                  "}",
+                  "pm.test('Créée (201)', () => pm.response.to.have.status(201));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Matériel informatique\",\n  \"description\": \"Ordinateurs, écrans, périphériques.\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/categories",
+              "host": ["{{baseUrl}}"],
+              "path": ["categories"]
+            },
+            "description": "**Accès : ADMIN, MANAGER.** Sans `parentId` = catégorie racine. L'id est mémorisé dans `categoryId`."
+          }
+        },
+        {
+          "name": "Créer une sous-catégorie",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const json = pm.response.json();",
+                  "if (json && json.success && json.data && json.data.id) {",
+                  "    pm.collectionVariables.set('subCategoryId', json.data.id);",
+                  "    console.log('subCategoryId = ' + json.data.id);",
+                  "}",
+                  "pm.test('Créée (201)', () => pm.response.to.have.status(201));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Écrans\",\n  \"parentId\": \"{{categoryId}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/categories",
+              "host": ["{{baseUrl}}"],
+              "path": ["categories"]
+            },
+            "description": "**Accès : ADMIN, MANAGER.** Le parent doit être une catégorie RACINE (1 seul niveau de sous-catégories). L'id est mémorisé dans `subCategoryId`."
+          }
+        },
+        {
+          "name": "Détail d'une catégorie",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/categories/{{categoryId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["categories", "{{categoryId}}"]
+            },
+            "description": "**Accès : tout utilisateur connecté.**"
+          }
+        },
+        {
+          "name": "Modifier une catégorie",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"description\": \"Ordinateurs, écrans, périphériques et accessoires.\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/categories/{{categoryId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["categories", "{{categoryId}}"]
+            },
+            "description": "**Accès : ADMIN, MANAGER.** Sémantique PATCH. Une catégorie ne peut pas devenir sa propre parente (409)."
+          }
+        },
+        {
+          "name": "Supprimer une catégorie",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/categories/{{subCategoryId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["categories", "{{subCategoryId}}"]
+            },
+            "description": "**Accès : ADMIN.** Refusé (409) si la catégorie a des sous-catégories ou des produits rattachés — supprime d'abord le produit de démo. Réponse : 204."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Produits",
+      "item": [
+        {
+          "name": "Lister les produits",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/products?page=1&limit=20",
+              "host": ["{{baseUrl}}"],
+              "path": ["products"],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "limit",
+                  "value": "20"
+                },
+                {
+                  "key": "categoryId",
+                  "value": "{{subCategoryId}}",
+                  "disabled": true
+                },
+                {
+                  "key": "type",
+                  "value": "PRODUCT",
+                  "description": "PRODUCT | SERVICE",
+                  "disabled": true
+                },
+                {
+                  "key": "isActive",
+                  "value": "true",
+                  "disabled": true
+                },
+                {
+                  "key": "search",
+                  "value": "dell",
+                  "description": "Recherche sur SKU et nom",
+                  "disabled": true
+                },
+                {
+                  "key": "sortBy",
+                  "value": "unitPrice",
+                  "description": "sku | name | type | unitPrice | vatRate | isActive | createdAt",
+                  "disabled": true
+                },
+                {
+                  "key": "sortDirection",
+                  "value": "DESC",
+                  "disabled": true
+                }
+              ]
+            },
+            "description": "**Accès : tout utilisateur connecté.** Liste paginée. Vérifie que `unitPrice` arrive en NOMBRE (349.9), pas en chaîne : c'est le transformer decimal."
+          }
+        },
+        {
+          "name": "Créer un produit (SKU auto)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const json = pm.response.json();",
+                  "if (json && json.success && json.data && json.data.id) {",
+                  "    pm.collectionVariables.set('productId', json.data.id);",
+                  "    console.log('productId = ' + json.data.id + ' — SKU : ' + json.data.sku);",
+                  "}",
+                  "pm.test('Créé (201)', () => pm.response.to.have.status(201));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Écran Dell 27\\\" QHD\",\n  \"type\": \"PRODUCT\",\n  \"unit\": \"UNIT\",\n  \"unitPrice\": 349.90,\n  \"purchasePrice\": 220,\n  \"vatRate\": 20,\n  \"categoryId\": \"{{subCategoryId}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/products",
+              "host": ["{{baseUrl}}"],
+              "path": ["products"]
+            },
+            "description": "**Accès : ADMIN, MANAGER.** Sans `sku` : auto-généré (PROD-0001, PROD-0002…). L'id est mémorisé dans `productId`. Regarde le SKU dans la console Postman."
+          }
+        },
+        {
+          "name": "Créer un service",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Installation sur site\",\n  \"type\": \"SERVICE\",\n  \"unit\": \"HOUR\",\n  \"unitPrice\": 85\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/products",
+              "host": ["{{baseUrl}}"],
+              "path": ["products"]
+            },
+            "description": "**Accès : ADMIN, MANAGER.** Un SERVICE est facturable mais n'aura JAMAIS de stock (règle appliquée au module 04). TVA 20 % par défaut si absente."
+          }
+        },
+        {
+          "name": "Détail d'un produit",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/products/{{productId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["products", "{{productId}}"]
+            },
+            "description": "**Accès : tout utilisateur connecté.** 404 si inconnu ou supprimé."
+          }
+        },
+        {
+          "name": "Modifier un produit",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"unitPrice\": 329.90,\n  \"description\": \"Promotion été 2026.\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/products/{{productId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["products", "{{productId}}"]
+            },
+            "description": "**Accès : ADMIN, MANAGER.** Si le SKU change, son unicité est re-vérifiée (409 si déjà pris). `isActive: true` réactive."
+          }
+        },
+        {
+          "name": "Désactiver un produit",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/products/{{productId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["products", "{{productId}}"]
+            },
+            "description": "**Accès : ADMIN.** Suppression logique (soft-delete). Réponse : 204 sans body."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Scénarios d'erreur (démo)",
+      "item": [
+        {
+          "name": "409 — sous-sous-catégorie interdite",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Trop profond\",\n  \"parentId\": \"{{subCategoryId}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/categories",
+              "host": ["{{baseUrl}}"],
+              "path": ["categories"]
+            },
+            "description": "Le parent est déjà une sous-catégorie : attendu **409 `BUSINESS_RULE_VIOLATION`** (1 seul niveau de hiérarchie)."
+          }
+        },
+        {
+          "name": "400 — TVA fantaisiste",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Test TVA\",\n  \"type\": \"PRODUCT\",\n  \"unit\": \"UNIT\",\n  \"unitPrice\": 10,\n  \"vatRate\": 19.6\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/products",
+              "host": ["{{baseUrl}}"],
+              "path": ["products"]
+            },
+            "description": "Attendu **400 `VALIDATION_ERROR`** : la TVA doit valoir 0, 5.5, 10 ou 20 (19.6 n'existe plus depuis 2014 !)."
+          }
+        },
+        {
+          "name": "409 — supprimer une catégorie non vide",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/categories/{{subCategoryId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["categories", "{{subCategoryId}}"]
+            },
+            "description": "À lancer TANT QUE le produit de démo y est rattaché : attendu **409 `BUSINESS_RULE_VIOLATION`** avec un message explicite — la clé étrangère SQL est traduite en erreur métier lisible."
+          }
+        }
+      ]
+    }
+  ]
+}

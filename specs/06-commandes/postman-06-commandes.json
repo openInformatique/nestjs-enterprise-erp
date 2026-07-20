@@ -1,0 +1,861 @@
+{
+  "info": {
+    "name": "ERP — 06 · Commandes (Clients & Fournisseurs)",
+    "description": "Collection du module 06 (guide mini-DEV-06).\n\n**Avant de commencer** :\n1. Renseigne la variable de collection `adminPassword` (onglet Variables).\n2. Lance « Auth / Login (admin) ».\n3. Déroule « Prérequis » (client, fournisseur, produit, entrepôt), puis les dossiers DANS L'ORDRE : le flux FOURNISSEUR remplit le stock (10 écrans), le flux CLIENT le consomme, l'annulation le réinjecte, et la conversion ferme la boucle devis → commande.\n\nCycle de vie : `DRAFT → CONFIRMED → IN_PROGRESS → DELIVERED`, annulable partout sauf DELIVERED.\nStock : SORT au `start` (commande CUSTOMER), ENTRE au `complete` (commande SUPPLIER), réinjecté au `cancel`.\n\nEnveloppe de réponse : `{ success, data, meta }` — succès ; `{ success, error: { code, message }, meta }` — erreur.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{accessToken}}",
+        "type": "string"
+      }
+    ]
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:3000/api/v1",
+      "type": "string"
+    },
+    {
+      "key": "adminPassword",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "accessToken",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "customerId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "supplierId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "productId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "warehouseId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "supplierOrderId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "customerOrderId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "cancelOrderId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "quoteId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "convertedOrderId",
+      "value": "",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "Auth",
+      "item": [
+        {
+          "name": "Login (admin)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const json = pm.response.json();",
+                  "if (json && json.success && json.data && json.data.accessToken) {",
+                  "    pm.collectionVariables.set('accessToken', json.data.accessToken);",
+                  "    console.log('accessToken enregistré dans les variables de collection.');",
+                  "}",
+                  "pm.test('Login réussi (200)', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"admin@local.dev\",\n  \"password\": \"{{adminPassword}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/auth/login",
+              "host": ["{{baseUrl}}"],
+              "path": ["auth", "login"]
+            },
+            "description": "Connexion. Le token d'accès (`data.accessToken`) est stocké automatiquement dans la variable `accessToken`."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Prérequis (modules 02, 03, 04)",
+      "item": [
+        {
+          "name": "Créer un client",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const json = pm.response.json();",
+                  "if (json && json.success && json.data && json.data.id) {",
+                  "    pm.collectionVariables.set('customerId', json.data.id);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"type\": \"CUSTOMER\",\n  \"companyName\": \"ACME Industries\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/contacts",
+              "host": ["{{baseUrl}}"],
+              "path": ["contacts"]
+            },
+            "description": "Route du module 02 — le client des commandes CUSTOMER."
+          }
+        },
+        {
+          "name": "Créer un fournisseur",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const json = pm.response.json();",
+                  "if (json && json.success && json.data && json.data.id) {",
+                  "    pm.collectionVariables.set('supplierId', json.data.id);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"type\": \"SUPPLIER\",\n  \"companyName\": \"Grossiste Écrans SARL\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/contacts",
+              "host": ["{{baseUrl}}"],
+              "path": ["contacts"]
+            },
+            "description": "Route du module 02 — le fournisseur des commandes SUPPLIER."
+          }
+        },
+        {
+          "name": "Créer un produit",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const json = pm.response.json();",
+                  "if (json && json.success && json.data && json.data.id) {",
+                  "    pm.collectionVariables.set('productId', json.data.id);",
+                  "    console.log('productId = ' + json.data.id + ' — SKU : ' + json.data.sku);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Écran Dell 27\\\" QHD\",\n  \"type\": \"PRODUCT\",\n  \"unit\": \"UNIT\",\n  \"unitPrice\": 349.90,\n  \"purchasePrice\": 220\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/products",
+              "host": ["{{baseUrl}}"],
+              "path": ["products"]
+            },
+            "description": "Route du module 03 — le produit stocké qui traversera tout le flux."
+          }
+        },
+        {
+          "name": "Créer un entrepôt",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const json = pm.response.json();",
+                  "if (json && json.success && json.data && json.data.id) {",
+                  "    pm.collectionVariables.set('warehouseId', json.data.id);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Entrepôt Paris Nord\",\n  \"code\": \"WH-PARIS\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/warehouses",
+              "host": ["{{baseUrl}}"],
+              "path": ["warehouses"]
+            },
+            "description": "Route du module 04 — l'entrepôt de réception et de livraison."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Flux FOURNISSEUR (le stock entre)",
+      "item": [
+        {
+          "name": "1 · Commander 10 écrans au fournisseur",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const json = pm.response.json();",
+                  "if (json && json.success && json.data && json.data.id) {",
+                  "    pm.collectionVariables.set('supplierOrderId', json.data.id);",
+                  "    console.log('supplierOrderId = ' + json.data.id + ' — numéro : ' + json.data.number);",
+                  "}",
+                  "pm.test('Créée (201)', () => pm.response.to.have.status(201));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"type\": \"SUPPLIER\",\n  \"contactId\": \"{{supplierId}}\",\n  \"lines\": [\n    {\n      \"productId\": \"{{productId}}\",\n      \"quantity\": 10,\n      \"unitPrice\": 220\n    }\n  ]\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/orders",
+              "host": ["{{baseUrl}}"],
+              "path": ["orders"]
+            },
+            "description": "**Accès : ADMIN, MANAGER.** Numéro `CDF-YYYY-0001` (séquence fournisseur, distincte des CMD-). Le prix d'achat (220) est saisi sur la ligne."
+          }
+        },
+        {
+          "name": "2 · Confirmer (DRAFT → CONFIRMED)",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/orders/{{supplierOrderId}}/confirm",
+              "host": ["{{baseUrl}}"],
+              "path": ["orders", "{{supplierOrderId}}", "confirm"]
+            },
+            "description": "**Accès : ADMIN, MANAGER.**"
+          }
+        },
+        {
+          "name": "3 · Départ (CONFIRMED → IN_PROGRESS)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/orders/{{supplierOrderId}}/start",
+              "host": ["{{baseUrl}}"],
+              "path": ["orders", "{{supplierOrderId}}", "start"]
+            },
+            "description": "**Accès : tout connecté.** Pour une commande FOURNISSEUR : simple transition (le fournisseur expédie) — aucun mouvement de stock ici."
+          }
+        },
+        {
+          "name": "4 · Réception (IN_PROGRESS → DELIVERED) : le stock ENTRE",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"warehouseId\": \"{{warehouseId}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/orders/{{supplierOrderId}}/complete",
+              "host": ["{{baseUrl}}"],
+              "path": ["orders", "{{supplierOrderId}}", "complete"]
+            },
+            "description": "**Accès : tout connecté.** La marchandise arrive : mouvement IN de 10 avec `unitCost` = 220 (le prix d'achat de la ligne), `deliveredAt` posé. Vérifie ensuite `GET /stock` : quantité = 10."
+          }
+        },
+        {
+          "name": "5 · Vérifier le stock (10 attendus)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/stock",
+              "host": ["{{baseUrl}}"],
+              "path": ["stock"]
+            },
+            "description": "Route du module 04 : le niveau enrichi doit afficher 10 écrans à WH-PARIS."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Flux CLIENT (le stock sort)",
+      "item": [
+        {
+          "name": "1 · Commande client de 2 écrans",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const json = pm.response.json();",
+                  "if (json && json.success && json.data && json.data.id) {",
+                  "    pm.collectionVariables.set('customerOrderId', json.data.id);",
+                  "    console.log('customerOrderId = ' + json.data.id + ' — numéro : ' + json.data.number);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"type\": \"CUSTOMER\",\n  \"contactId\": \"{{customerId}}\",\n  \"expectedDeliveryDate\": \"2026-08-01\",\n  \"lines\": [\n    {\n      \"productId\": \"{{productId}}\",\n      \"quantity\": 2\n    }\n  ]\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/orders",
+              "host": ["{{baseUrl}}"],
+              "path": ["orders"]
+            },
+            "description": "**Accès : ADMIN, MANAGER.** Numéro `CMD-YYYY-0001`. Prix et description copiés du produit (349.90), figés dans la ligne."
+          }
+        },
+        {
+          "name": "2 · Confirmer",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/orders/{{customerOrderId}}/confirm",
+              "host": ["{{baseUrl}}"],
+              "path": ["orders", "{{customerOrderId}}", "confirm"]
+            },
+            "description": "**Accès : ADMIN, MANAGER.**"
+          }
+        },
+        {
+          "name": "3 · Départ en livraison : le stock SORT (10 → 8)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"warehouseId\": \"{{warehouseId}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/orders/{{customerOrderId}}/start",
+              "host": ["{{baseUrl}}"],
+              "path": ["orders", "{{customerOrderId}}", "start"]
+            },
+            "description": "**Accès : tout connecté.** Mouvement OUT de 2 (référence = numéro de commande), niveau 10 → 8, entrepôt mémorisé sur la commande. Sans `warehouseId` : 409 explicite (voir Scénarios d'erreur)."
+          }
+        },
+        {
+          "name": "4 · Clôturer (IN_PROGRESS → DELIVERED)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/orders/{{customerOrderId}}/complete",
+              "host": ["{{baseUrl}}"],
+              "path": ["orders", "{{customerOrderId}}", "complete"]
+            },
+            "description": "**Accès : tout connecté.** Pour une commande CLIENT : le stock est déjà sorti au départ — simple transition + `deliveredAt`. La commande est désormais intouchable (ni modification, ni annulation)."
+          }
+        },
+        {
+          "name": "Lister les commandes (filtres)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/orders?page=1&limit=20",
+              "host": ["{{baseUrl}}"],
+              "path": ["orders"],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "limit",
+                  "value": "20"
+                },
+                {
+                  "key": "type",
+                  "value": "CUSTOMER",
+                  "description": "CUSTOMER | SUPPLIER",
+                  "disabled": true
+                },
+                {
+                  "key": "status",
+                  "value": "DELIVERED",
+                  "description": "DRAFT | CONFIRMED | IN_PROGRESS | DELIVERED | CANCELLED",
+                  "disabled": true
+                },
+                {
+                  "key": "contactId",
+                  "value": "{{customerId}}",
+                  "disabled": true
+                },
+                {
+                  "key": "from",
+                  "value": "2026-01-01",
+                  "disabled": true
+                },
+                {
+                  "key": "to",
+                  "value": "2026-12-31",
+                  "disabled": true
+                },
+                {
+                  "key": "search",
+                  "value": "CMD-2026",
+                  "description": "Recherche sur numéro et nom du contact",
+                  "disabled": true
+                }
+              ]
+            },
+            "description": "**Accès : tout connecté.** Liste paginée avec le nom du contact — sans les lignes (le détail les charge)."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Annulation compensatrice",
+      "item": [
+        {
+          "name": "1 · Commande de 3, confirmée et partie en livraison",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const json = pm.response.json();",
+                  "if (json && json.success && json.data && json.data.id) {",
+                  "    pm.collectionVariables.set('cancelOrderId', json.data.id);",
+                  "    console.log('cancelOrderId = ' + json.data.id + ' — numéro : ' + json.data.number);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"type\": \"CUSTOMER\",\n  \"contactId\": \"{{customerId}}\",\n  \"lines\": [\n    {\n      \"productId\": \"{{productId}}\",\n      \"quantity\": 3\n    }\n  ]\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/orders",
+              "host": ["{{baseUrl}}"],
+              "path": ["orders"]
+            },
+            "description": "Enchaîne ensuite « confirm » puis « start » (requêtes suivantes) : le stock passera de 8 à 5."
+          }
+        },
+        {
+          "name": "2 · Confirmer",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/orders/{{cancelOrderId}}/confirm",
+              "host": ["{{baseUrl}}"],
+              "path": ["orders", "{{cancelOrderId}}", "confirm"]
+            },
+            "description": ""
+          }
+        },
+        {
+          "name": "3 · Départ en livraison (8 → 5)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"warehouseId\": \"{{warehouseId}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/orders/{{cancelOrderId}}/start",
+              "host": ["{{baseUrl}}"],
+              "path": ["orders", "{{cancelOrderId}}", "start"]
+            },
+            "description": ""
+          }
+        },
+        {
+          "name": "4 · ANNULER : le stock revient (5 → 8)",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/orders/{{cancelOrderId}}/cancel",
+              "host": ["{{baseUrl}}"],
+              "path": ["orders", "{{cancelOrderId}}", "cancel"]
+            },
+            "description": "**Accès : ADMIN, MANAGER.** La commande était partie en livraison : les 3 écrans sortis sont RÉINJECTÉS par des mouvements IN de référence `ANNULATION CMD-XXXX`. On n'efface jamais l'historique — on écrit l'inverse."
+          }
+        },
+        {
+          "name": "5 · La preuve dans l'historique des mouvements",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/stock/movements?search=ANNULATION",
+              "host": ["{{baseUrl}}"],
+              "path": ["stock", "movements"],
+              "query": [
+                {
+                  "key": "search",
+                  "value": "ANNULATION"
+                }
+              ]
+            },
+            "description": "Route du module 04 : le mouvement compensateur apparaît, avec sa référence `ANNULATION CMD-XXXX` et QUI l'a déclenché."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Devis → Commande (la boucle)",
+      "item": [
+        {
+          "name": "1 · Créer un devis (remise 10 %)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const json = pm.response.json();",
+                  "if (json && json.success && json.data && json.data.id) {",
+                  "    pm.collectionVariables.set('quoteId', json.data.id);",
+                  "    console.log('quoteId = ' + json.data.id + ' — numéro : ' + json.data.number);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"customerId\": \"{{customerId}}\",\n  \"lines\": [\n    {\n      \"productId\": \"{{productId}}\",\n      \"quantity\": 2,\n      \"discountPercent\": 10\n    }\n  ]\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/quotes",
+              "host": ["{{baseUrl}}"],
+              "path": ["quotes"]
+            },
+            "description": "Route du module 05 — le devis qui sera converti."
+          }
+        },
+        {
+          "name": "2 · Envoyer puis accepter",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Envoyé (200)', () => pm.response.to.have.status(200));",
+                  "console.log('Pense à lancer la requête ACCEPT juste après.');"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/quotes/{{quoteId}}/send",
+              "host": ["{{baseUrl}}"],
+              "path": ["quotes", "{{quoteId}}", "send"]
+            },
+            "description": "DRAFT → SENT. Lance ensuite la requête suivante (accept)."
+          }
+        },
+        {
+          "name": "2bis · Accepter",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/quotes/{{quoteId}}/accept",
+              "host": ["{{baseUrl}}"],
+              "path": ["quotes", "{{quoteId}}", "accept"]
+            },
+            "description": "SENT → ACCEPTED : le devis est convertible."
+          }
+        },
+        {
+          "name": "3 · CONVERTIR en commande",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const json = pm.response.json();",
+                  "if (json && json.success && json.data && json.data.id) {",
+                  "    pm.collectionVariables.set('convertedOrderId', json.data.id);",
+                  "    console.log('Commande ' + json.data.number + ' créée depuis le devis (quoteId = ' + json.data.quoteId + ')');",
+                  "    console.log('Prix unitaire remise fondue : ' + json.data.lines[0].unitPrice + ' (attendu : 314.91)');",
+                  "}",
+                  "pm.test('Convertie (201)', () => pm.response.to.have.status(201));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/quotes/{{quoteId}}/convert",
+              "host": ["{{baseUrl}}"],
+              "path": ["quotes", "{{quoteId}}", "convert"]
+            },
+            "description": "**Accès : ADMIN, MANAGER.** Crée une commande CUSTOMER (201) : lignes copiées, remise 10 % FONDUE dans le prix unitaire (349.90 → 314.91), `quoteId` tracé. Relancer l'appel → 409 (un devis ne se convertit qu'une fois)."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Scénarios d'erreur (démo)",
+      "item": [
+        {
+          "name": "409 — commande client pour un fournisseur",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"type\": \"CUSTOMER\",\n  \"contactId\": \"{{supplierId}}\",\n  \"lines\": [\n    {\n      \"description\": \"Test\",\n      \"quantity\": 1,\n      \"unitPrice\": 10\n    }\n  ]\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/orders",
+              "host": ["{{baseUrl}}"],
+              "path": ["orders"]
+            },
+            "description": "Attendu **409 `BUSINESS_RULE_VIOLATION`** : cohérence contact/type — un fournisseur pur ne passe pas de commande client."
+          }
+        },
+        {
+          "name": "409 — départ en livraison sans entrepôt",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/orders/{{cancelOrderId}}/start",
+              "host": ["{{baseUrl}}"],
+              "path": ["orders", "{{cancelOrderId}}", "start"]
+            },
+            "description": "À lancer sur une commande CONFIRMED avec produits stockés, body vide : attendu **409** — « précisez l'entrepôt de sortie »."
+          }
+        },
+        {
+          "name": "409 — stock insuffisant, rien ne bouge",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"type\": \"CUSTOMER\",\n  \"contactId\": \"{{customerId}}\",\n  \"lines\": [\n    {\n      \"productId\": \"{{productId}}\",\n      \"quantity\": 999\n    }\n  ]\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/orders",
+              "host": ["{{baseUrl}}"],
+              "path": ["orders"]
+            },
+            "description": "Crée cette commande de 999, confirme-la, puis tente `start` avec l'entrepôt : attendu **409** avec le disponible réel — et vérifie via `GET /stock` que RIEN n'est sorti (la vérification précède toute écriture)."
+          }
+        },
+        {
+          "name": "409 — annuler une commande livrée",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/orders/{{customerOrderId}}/cancel",
+              "host": ["{{baseUrl}}"],
+              "path": ["orders", "{{customerOrderId}}", "cancel"]
+            },
+            "description": "La commande du flux CLIENT est DELIVERED : attendu **409** — une commande livrée se traite par avoir (module 07), jamais par annulation."
+          }
+        },
+        {
+          "name": "409 — supprimer une commande non-brouillon",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/orders/{{customerOrderId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["orders", "{{customerOrderId}}"]
+            },
+            "description": "Attendu **409** : seule une commande DRAFT se supprime — au-delà, on annule (l'historique doit rester)."
+          }
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,671 @@
+{
+  "info": {
+    "name": "ERP — 04 · Gestion des Stocks",
+    "description": "Collection du module 04 (guide mini-DEV-04).\n\n**Avant de commencer** :\n1. Renseigne la variable de collection `adminPassword` (onglet Variables).\n2. Lance « Auth / Login (admin) ».\n3. Déroule « Prérequis » (crée un produit et un service via le module 03), puis « Entrepôts », puis « Stock » DANS L'ORDRE : chaque création mémorise son id (`warehouseParisId`, `warehouseLyonId`, `productId`, `serviceId`).\n\nLe parcours reproduit celui du guide : entrée de 10 → sortie de 3 → transfert de 4 vers Lyon → ajustement à 2 (casse) → stocks bas → historique.\n\nTypes de mouvement : `IN` | `OUT` | `ADJUSTMENT` | `TRANSFER`. La quantité d'un mouvement est toujours positive : la direction est portée par le type.\n\nEnveloppe de réponse : `{ success, data, meta }` — succès ; `{ success, error: { code, message }, meta }` — erreur.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{accessToken}}",
+        "type": "string"
+      }
+    ]
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:3000/api/v1",
+      "type": "string"
+    },
+    {
+      "key": "adminPassword",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "accessToken",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "warehouseParisId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "warehouseLyonId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "productId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "serviceId",
+      "value": "",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "Auth",
+      "item": [
+        {
+          "name": "Login (admin)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const json = pm.response.json();",
+                  "if (json && json.success && json.data && json.data.accessToken) {",
+                  "    pm.collectionVariables.set('accessToken', json.data.accessToken);",
+                  "    console.log('accessToken enregistré dans les variables de collection.');",
+                  "}",
+                  "pm.test('Login réussi (200)', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"admin@local.dev\",\n  \"password\": \"{{adminPassword}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/auth/login",
+              "host": ["{{baseUrl}}"],
+              "path": ["auth", "login"]
+            },
+            "description": "Connexion. Le token d'accès (`data.accessToken`) est stocké automatiquement dans la variable `accessToken`."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Prérequis (module 03)",
+      "item": [
+        {
+          "name": "Créer un produit de démo",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const json = pm.response.json();",
+                  "if (json && json.success && json.data && json.data.id) {",
+                  "    pm.collectionVariables.set('productId', json.data.id);",
+                  "    console.log('productId = ' + json.data.id + ' — SKU : ' + json.data.sku);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Écran Dell 27\\\" QHD\",\n  \"type\": \"PRODUCT\",\n  \"unit\": \"UNIT\",\n  \"unitPrice\": 349.90,\n  \"purchasePrice\": 220\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/products",
+              "host": ["{{baseUrl}}"],
+              "path": ["products"]
+            },
+            "description": "Route du module 03. Crée le bien physique qui sera mouvementé ; son id est mémorisé dans `productId`."
+          }
+        },
+        {
+          "name": "Créer un service de démo",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const json = pm.response.json();",
+                  "if (json && json.success && json.data && json.data.id) {",
+                  "    pm.collectionVariables.set('serviceId', json.data.id);",
+                  "    console.log('serviceId = ' + json.data.id);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Installation sur site\",\n  \"type\": \"SERVICE\",\n  \"unit\": \"HOUR\",\n  \"unitPrice\": 85\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/products",
+              "host": ["{{baseUrl}}"],
+              "path": ["products"]
+            },
+            "description": "Route du module 03. Sert au scénario d'erreur « un service n'a pas de stock » ; son id est mémorisé dans `serviceId`."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Entrepôts",
+      "item": [
+        {
+          "name": "Créer l'entrepôt Paris",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const json = pm.response.json();",
+                  "if (json && json.success && json.data && json.data.id) {",
+                  "    pm.collectionVariables.set('warehouseParisId', json.data.id);",
+                  "    console.log('warehouseParisId = ' + json.data.id + ' — code : ' + json.data.code);",
+                  "}",
+                  "pm.test('Créé (201)', () => pm.response.to.have.status(201));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Entrepôt Paris Nord\",\n  \"code\": \"wh-paris\",\n  \"street\": \"12 rue de la Logistique\",\n  \"city\": \"Saint-Denis\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/warehouses",
+              "host": ["{{baseUrl}}"],
+              "path": ["warehouses"]
+            },
+            "description": "**Accès : ADMIN.** Le code est envoyé en minuscules exprès : regarde la réponse, il est normalisé en WH-PARIS. Id mémorisé dans `warehouseParisId`."
+          }
+        },
+        {
+          "name": "Créer l'entrepôt Lyon",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const json = pm.response.json();",
+                  "if (json && json.success && json.data && json.data.id) {",
+                  "    pm.collectionVariables.set('warehouseLyonId', json.data.id);",
+                  "    console.log('warehouseLyonId = ' + json.data.id);",
+                  "}",
+                  "pm.test('Créé (201)', () => pm.response.to.have.status(201));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Entrepôt Lyon\",\n  \"code\": \"WH-LYON\",\n  \"city\": \"Corbas\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/warehouses",
+              "host": ["{{baseUrl}}"],
+              "path": ["warehouses"]
+            },
+            "description": "**Accès : ADMIN.** Id mémorisé dans `warehouseLyonId` (cible du transfert)."
+          }
+        },
+        {
+          "name": "Lister les entrepôts",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/warehouses",
+              "host": ["{{baseUrl}}"],
+              "path": ["warehouses"],
+              "query": [
+                {
+                  "key": "isActive",
+                  "value": "true",
+                  "disabled": true
+                }
+              ]
+            },
+            "description": "**Accès : tout utilisateur connecté.** Liste non paginée (volume faible)."
+          }
+        },
+        {
+          "name": "Détail d'un entrepôt",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/warehouses/{{warehouseParisId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["warehouses", "{{warehouseParisId}}"]
+            },
+            "description": "**Accès : tout utilisateur connecté.** 404 si inconnu."
+          }
+        },
+        {
+          "name": "Modifier un entrepôt",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"street\": \"14 rue de la Logistique\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/warehouses/{{warehouseParisId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["warehouses", "{{warehouseParisId}}"]
+            },
+            "description": "**Accès : ADMIN, MANAGER.** Sémantique PATCH. `isActive: true` réactive ; `isActive: false` est REFUSÉ (409) — la désactivation passe par DELETE, qui vérifie que l'entrepôt est vide."
+          }
+        },
+        {
+          "name": "Désactiver un entrepôt",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/warehouses/{{warehouseParisId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["warehouses", "{{warehouseParisId}}"]
+            },
+            "description": "**Accès : ADMIN.** Refusé (409, message avec la quantité restante) tant que l'entrepôt n'est pas VIDE. À tester : (1) avec du stock → 409 ; (2) après « Ajuster à zéro » du dossier Stock → 204."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Stock",
+      "item": [
+        {
+          "name": "1 · Entrée : +10 à Paris",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"productId\": \"{{productId}}\",\n  \"warehouseId\": \"{{warehouseParisId}}\",\n  \"quantity\": 10,\n  \"unitCost\": 220,\n  \"reference\": \"CMD-F-2026-0042\",\n  \"notes\": \"Réception fournisseur.\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/stock/in",
+              "host": ["{{baseUrl}}"],
+              "path": ["stock", "in"]
+            },
+            "description": "**Accès : tout utilisateur connecté.** Réception de marchandise. Écrit atomiquement le mouvement IN + le niveau (0 → 10). `unitCost` et `reference` optionnels."
+          }
+        },
+        {
+          "name": "2 · Consulter les niveaux (enrichis)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/stock?page=1&limit=20",
+              "host": ["{{baseUrl}}"],
+              "path": ["stock"],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "limit",
+                  "value": "20"
+                },
+                {
+                  "key": "productId",
+                  "value": "{{productId}}",
+                  "disabled": true
+                },
+                {
+                  "key": "warehouseId",
+                  "value": "{{warehouseParisId}}",
+                  "disabled": true
+                },
+                {
+                  "key": "lowStock",
+                  "value": "true",
+                  "description": "true = quantité < 5",
+                  "disabled": true
+                },
+                {
+                  "key": "search",
+                  "value": "dell",
+                  "description": "Recherche sur SKU et nom du produit",
+                  "disabled": true
+                }
+              ]
+            },
+            "description": "**Accès : tout utilisateur connecté.** Niveaux paginés et ENRICHIS : chaque ligne porte le SKU, le nom du produit et le nom de l'entrepôt — pas des UUID."
+          }
+        },
+        {
+          "name": "3 · Sortie : -3 à Paris",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"productId\": \"{{productId}}\",\n  \"warehouseId\": \"{{warehouseParisId}}\",\n  \"quantity\": 3,\n  \"notes\": \"Vente comptoir.\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/stock/out",
+              "host": ["{{baseUrl}}"],
+              "path": ["stock", "out"]
+            },
+            "description": "**Accès : tout utilisateur connecté.** Sortie de stock (10 → 7). Refusé (409) si le stock disponible ne suffit pas — le message dit combien il reste."
+          }
+        },
+        {
+          "name": "4 · Transfert : 4 de Paris vers Lyon",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"productId\": \"{{productId}}\",\n  \"fromWarehouseId\": \"{{warehouseParisId}}\",\n  \"toWarehouseId\": \"{{warehouseLyonId}}\",\n  \"quantity\": 4,\n  \"notes\": \"Réassort boutique Lyon.\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/stock/transfer",
+              "host": ["{{baseUrl}}"],
+              "path": ["stock", "transfer"]
+            },
+            "description": "**Accès : ADMIN, MANAGER.** LE cas transactionnel : 2 mouvements (TRANSFER + IN) et 2 niveaux écrits dans UNE transaction SQL. Réponse : les deux niveaux résultants (from: 3, to: 4)."
+          }
+        },
+        {
+          "name": "5 · Ajustement : inventaire Lyon à 2",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"productId\": \"{{productId}}\",\n  \"warehouseId\": \"{{warehouseLyonId}}\",\n  \"newQuantity\": 2,\n  \"notes\": \"Casse constatée lors de l'inventaire.\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/stock/adjust",
+              "host": ["{{baseUrl}}"],
+              "path": ["stock", "adjust"]
+            },
+            "description": "**Accès : ADMIN, MANAGER.** `newQuantity` = quantité RÉELLEMENT comptée (pas un delta). Les notes sont OBLIGATOIRES ; l'écart y est ajouté automatiquement : regarde `(stock : 4 → 2)` dans la réponse."
+          }
+        },
+        {
+          "name": "6 · Stocks bas (lowStock)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/stock?lowStock=true",
+              "host": ["{{baseUrl}}"],
+              "path": ["stock"],
+              "query": [
+                {
+                  "key": "lowStock",
+                  "value": "true"
+                }
+              ]
+            },
+            "description": "**Accès : tout utilisateur connecté.** Après le parcours 1→5 : Paris (3) et Lyon (2) ressortent tous les deux (seuil : quantité < 5)."
+          }
+        },
+        {
+          "name": "7 · Historique des mouvements",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/stock/movements?page=1&limit=20",
+              "host": ["{{baseUrl}}"],
+              "path": ["stock", "movements"],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "limit",
+                  "value": "20"
+                },
+                {
+                  "key": "productId",
+                  "value": "{{productId}}",
+                  "disabled": true
+                },
+                {
+                  "key": "warehouseId",
+                  "value": "{{warehouseParisId}}",
+                  "disabled": true
+                },
+                {
+                  "key": "type",
+                  "value": "TRANSFER",
+                  "description": "IN | OUT | ADJUSTMENT | TRANSFER",
+                  "disabled": true
+                },
+                {
+                  "key": "from",
+                  "value": "2026-07-01",
+                  "description": "Début de période (ISO 8601)",
+                  "disabled": true
+                },
+                {
+                  "key": "to",
+                  "value": "2026-12-31",
+                  "disabled": true
+                },
+                {
+                  "key": "search",
+                  "value": "CMD-F",
+                  "description": "Recherche sur référence et notes",
+                  "disabled": true
+                }
+              ]
+            },
+            "description": "**Accès : ADMIN, MANAGER.** La source de vérité : chaque mouvement porte QUI a agi (`performedBy`), quand, et pourquoi. Tri par défaut : plus récents d'abord."
+          }
+        },
+        {
+          "name": "8 · Ajuster Paris à zéro (pour la désactivation)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"productId\": \"{{productId}}\",\n  \"warehouseId\": \"{{warehouseParisId}}\",\n  \"newQuantity\": 0,\n  \"notes\": \"Fermeture de l'entrepôt de démonstration.\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/stock/adjust",
+              "host": ["{{baseUrl}}"],
+              "path": ["stock", "adjust"]
+            },
+            "description": "Vide l'entrepôt Paris : ensuite « Entrepôts / Désactiver un entrepôt » passe en 204."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Scénarios d'erreur (démo)",
+      "item": [
+        {
+          "name": "409 — un service n'a pas de stock",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"productId\": \"{{serviceId}}\",\n  \"warehouseId\": \"{{warehouseParisId}}\",\n  \"quantity\": 5\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/stock/in",
+              "host": ["{{baseUrl}}"],
+              "path": ["stock", "in"]
+            },
+            "description": "Attendu **409 `BUSINESS_RULE_VIOLATION`** : seuls les articles de type PRODUCT peuvent faire l'objet de mouvements."
+          }
+        },
+        {
+          "name": "409 — stock insuffisant",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"productId\": \"{{productId}}\",\n  \"warehouseId\": \"{{warehouseParisId}}\",\n  \"quantity\": 999\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/stock/out",
+              "host": ["{{baseUrl}}"],
+              "path": ["stock", "out"]
+            },
+            "description": "Attendu **409 `BUSINESS_RULE_VIOLATION`** avec le détail : « X disponible(s), 999 demandé(s) »."
+          }
+        },
+        {
+          "name": "409 — transfert vers soi-même",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"productId\": \"{{productId}}\",\n  \"fromWarehouseId\": \"{{warehouseParisId}}\",\n  \"toWarehouseId\": \"{{warehouseParisId}}\",\n  \"quantity\": 1\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/stock/transfer",
+              "host": ["{{baseUrl}}"],
+              "path": ["stock", "transfer"]
+            },
+            "description": "Attendu **409 `BUSINESS_RULE_VIOLATION`** : source et cible doivent être différents."
+          }
+        },
+        {
+          "name": "409 — désactiver un entrepôt non vide",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/warehouses/{{warehouseParisId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["warehouses", "{{warehouseParisId}}"]
+            },
+            "description": "À lancer TANT QUE Paris contient du stock : attendu **409 `BUSINESS_RULE_VIOLATION`** avec la quantité restante dans le message."
+          }
+        },
+        {
+          "name": "400 — ajustement sans notes",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"productId\": \"{{productId}}\",\n  \"warehouseId\": \"{{warehouseParisId}}\",\n  \"newQuantity\": 5\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/stock/adjust",
+              "host": ["{{baseUrl}}"],
+              "path": ["stock", "adjust"]
+            },
+            "description": "Attendu **400 `VALIDATION_ERROR`** : les notes sont obligatoires pour un ajustement (traçabilité d'inventaire)."
+          }
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,392 @@
+{
+  "info": {
+    "name": "ERP — 01 · Utilisateurs & Rôles",
+    "description": "Collection du module 01 (guide mini-DEV-01).\n\n**Avant de commencer** :\n1. Renseigne la variable de collection `adminPassword` (onglet Variables).\n2. Lance « Auth / Login (admin) » : le token est enregistré automatiquement dans `accessToken`, toutes les autres requêtes l'utilisent.\n3. Les requêtes du dossier Utilisateurs s'enchaînent dans l'ordre : « Créer un utilisateur » mémorise l'id créé dans `createdUserId`, réutilisé par les requêtes suivantes (détail, rôle, désactivation, réactivation).\n\nEnveloppe de réponse : `{ success, data, meta }` — succès ; `{ success, error: { code, message }, meta }` — erreur.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{accessToken}}",
+        "type": "string"
+      }
+    ]
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:3000/api/v1",
+      "type": "string"
+    },
+    {
+      "key": "adminPassword",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "accessToken",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "createdUserId",
+      "value": "",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "Auth",
+      "item": [
+        {
+          "name": "Login (admin)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const json = pm.response.json();",
+                  "if (json && json.success && json.data && json.data.accessToken) {",
+                  "    pm.collectionVariables.set('accessToken', json.data.accessToken);",
+                  "    console.log('accessToken enregistré dans les variables de collection.');",
+                  "}",
+                  "pm.test('Login réussi (200)', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"admin@local.dev\",\n  \"password\": \"{{adminPassword}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/auth/login",
+              "host": ["{{baseUrl}}"],
+              "path": ["auth", "login"]
+            },
+            "description": "Connexion. Le token d'accès renvoyé dans `data.accessToken` est stocké automatiquement dans la variable `accessToken` (script Tests). Le refresh token est posé en cookie httpOnly, géré par Postman."
+          }
+        },
+        {
+          "name": "Refresh",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const json = pm.response.json();",
+                  "if (json && json.success && json.data && json.data.accessToken) {",
+                  "    pm.collectionVariables.set('accessToken', json.data.accessToken);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/auth/refresh",
+              "host": ["{{baseUrl}}"],
+              "path": ["auth", "refresh"]
+            },
+            "description": "Rotation des tokens. Utilise le cookie httpOnly posé par le login (aucun body). Le nouveau token d'accès remplace `accessToken`."
+          }
+        },
+        {
+          "name": "Logout",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/auth/logout",
+              "host": ["{{baseUrl}}"],
+              "path": ["auth", "logout"]
+            },
+            "description": "Révoque la session courante."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Utilisateurs",
+      "item": [
+        {
+          "name": "Lister les utilisateurs",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/users?page=1&limit=20",
+              "host": ["{{baseUrl}}"],
+              "path": ["users"],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "limit",
+                  "value": "20"
+                },
+                {
+                  "key": "role",
+                  "value": "EMPLOYEE",
+                  "description": "ADMIN | MANAGER | EMPLOYEE",
+                  "disabled": true
+                },
+                {
+                  "key": "isActive",
+                  "value": "true",
+                  "disabled": true
+                },
+                {
+                  "key": "search",
+                  "value": "dupont",
+                  "description": "Recherche sur e-mail et nom affiché",
+                  "disabled": true
+                },
+                {
+                  "key": "sortBy",
+                  "value": "createdAt",
+                  "description": "email | displayName | role | isActive | createdAt | lastLoginAt",
+                  "disabled": true
+                },
+                {
+                  "key": "sortDirection",
+                  "value": "DESC",
+                  "disabled": true
+                }
+              ]
+            },
+            "description": "**Accès : ADMIN, MANAGER.** Liste paginée. Active les paramètres désactivés pour tester les filtres. La pagination est renvoyée dans `meta.pagination`."
+          }
+        },
+        {
+          "name": "Mon profil",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/users/me",
+              "host": ["{{baseUrl}}"],
+              "path": ["users", "me"]
+            },
+            "description": "**Accès : tout utilisateur connecté.** Profil du porteur du token (avec son rôle)."
+          }
+        },
+        {
+          "name": "Changer mon mot de passe",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"currentPassword\": \"MOT_DE_PASSE_ACTUEL\",\n  \"newPassword\": \"Erp!2027#neuf\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/users/me/password",
+              "host": ["{{baseUrl}}"],
+              "path": ["users", "me", "password"]
+            },
+            "description": "**Accès : tout utilisateur connecté.** Change le mot de passe du porteur du token. Réponse : 204 sans body.\n\n⚠️ Si tu l'exécutes avec le token admin, c'est le mot de passe ADMIN que tu changes — pense à mettre à jour `adminPassword`.\n\nErreurs : 409 `BUSINESS_RULE_VIOLATION` si le mot de passe actuel est incorrect ; 400 si le nouveau est trop faible (8 caractères min, majuscule, minuscule, chiffre, symbole)."
+          }
+        },
+        {
+          "name": "Créer un utilisateur",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const json = pm.response.json();",
+                  "if (json && json.success && json.data && json.data.id) {",
+                  "    pm.collectionVariables.set('createdUserId', json.data.id);",
+                  "    console.log('createdUserId = ' + json.data.id);",
+                  "}",
+                  "pm.test('Créé (201)', () => pm.response.to.have.status(201));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"test.postman@local.dev\",\n  \"password\": \"Erp!2026#demo\",\n  \"displayName\": \"Test Postman\",\n  \"role\": \"EMPLOYEE\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/users",
+              "host": ["{{baseUrl}}"],
+              "path": ["users"]
+            },
+            "description": "**Accès : ADMIN.** Crée un utilisateur local. `role` optionnel (EMPLOYEE par défaut). L'id créé est mémorisé dans `createdUserId` pour les requêtes suivantes.\n\nErreurs : 409 `RESOURCE_ALREADY_EXISTS` si l'e-mail est déjà pris."
+          }
+        },
+        {
+          "name": "Détail d'un utilisateur",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/users/{{createdUserId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["users", "{{createdUserId}}"]
+            },
+            "description": "**Accès : ADMIN, MANAGER.** Utilise l'id mémorisé par « Créer un utilisateur » (ou remplace par un UUID). 404 si inconnu ou désactivé."
+          }
+        },
+        {
+          "name": "Changer le rôle",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"role\": \"MANAGER\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/users/{{createdUserId}}/role",
+              "host": ["{{baseUrl}}"],
+              "path": ["users", "{{createdUserId}}", "role"]
+            },
+            "description": "**Accès : ADMIN.** Valeurs : ADMIN | MANAGER | EMPLOYEE.\n\nGarde-fous (409 `BUSINESS_RULE_VIOLATION`) : impossible de modifier son PROPRE rôle ; impossible de rétrograder le DERNIER admin actif."
+          }
+        },
+        {
+          "name": "Désactiver un utilisateur",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/users/{{createdUserId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["users", "{{createdUserId}}"]
+            },
+            "description": "**Accès : ADMIN.** Suppression logique (deleted_at + is_active=false). Réponse : 204 sans body.\n\nGarde-fous (409) : impossible de se désactiver soi-même ; impossible de désactiver le dernier admin actif."
+          }
+        },
+        {
+          "name": "Réactiver un utilisateur",
+          "request": {
+            "method": "PATCH",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/users/{{createdUserId}}/reactivate",
+              "host": ["{{baseUrl}}"],
+              "path": ["users", "{{createdUserId}}", "reactivate"]
+            },
+            "description": "**Accès : ADMIN.** Annule la désactivation (efface deleted_at, remet is_active=true). Idempotent : réactiver un compte déjà actif renvoie simplement son état."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Scénarios d'erreur (démo)",
+      "item": [
+        {
+          "name": "403 — EMPLOYEE tente de lister",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "TOKEN_DUN_COMPTE_EMPLOYEE",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/users",
+              "host": ["{{baseUrl}}"],
+              "path": ["users"]
+            },
+            "description": "Connecte-toi d'abord avec `user@local.dev` (Login en changeant le body), copie son token ici, puis exécute : attendu **403 `ACCESS_DENIED`** — la route exige ADMIN ou MANAGER."
+          }
+        },
+        {
+          "name": "409 — l'admin tente de changer SON rôle",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"role\": \"EMPLOYEE\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/users/ID_DE_L_ADMIN_CONNECTE/role",
+              "host": ["{{baseUrl}}"],
+              "path": ["users", "ID_DE_L_ADMIN_CONNECTE", "role"]
+            },
+            "description": "Récupère ton id via « Mon profil » et remplace-le dans l'URL : attendu **409 `BUSINESS_RULE_VIOLATION`** (garde-fou anti-verrouillage)."
+          }
+        },
+        {
+          "name": "400 — création invalide (validation)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"pas-un-email\",\n  \"password\": \"court\",\n  \"displayName\": \"\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/users",
+              "host": ["{{baseUrl}}"],
+              "path": ["users"]
+            },
+            "description": "Attendu **400 `VALIDATION_ERROR`** : e-mail invalide, mot de passe trop faible, nom vide — le ValidationPipe global rejette avant même d'atteindre le contrôleur."
+          }
+        }
+      ]
+    }
+  ]
+}

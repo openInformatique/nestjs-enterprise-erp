@@ -1,0 +1,707 @@
+{
+  "info": {
+    "name": "ERP — 07 · Facturation & Avoirs",
+    "description": "Collection du module 07 (guide mini-DEV-07).\n\n**Avant de commencer** :\n1. Renseigne la variable de collection `adminPassword` (onglet Variables).\n2. Lance « Auth / Login (admin) ».\n3. Déroule « Prérequis » (client + produit), puis les dossiers DANS L'ORDRE : facture manuelle → émission (point de non-retour) → avoir partiel, puis la facturation d'une commande livrée.\n\nCycle de vie : `DRAFT → SENT → (PARTIALLY_PAID | PAID : module 08) | OVERDUE (cron) | CANCELLED`.\nRègle d'or : une facture ÉMISE ne se modifie plus jamais — elle se corrige par un AVOIR (`AV-YYYY-NNNN`, montants en positif, le type porte le sens).\n\nEnveloppe de réponse : `{ success, data, meta }` — succès ; `{ success, error: { code, message }, meta }` — erreur.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{accessToken}}",
+        "type": "string"
+      }
+    ]
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:3000/api/v1",
+      "type": "string"
+    },
+    {
+      "key": "adminPassword",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "accessToken",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "customerId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "productId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "invoiceId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "creditNoteId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "draftInvoiceId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "orderId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "orderInvoiceId",
+      "value": "",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "Auth",
+      "item": [
+        {
+          "name": "Login (admin)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const json = pm.response.json();",
+                  "if (json && json.success && json.data && json.data.accessToken) {",
+                  "    pm.collectionVariables.set('accessToken', json.data.accessToken);",
+                  "    console.log('accessToken enregistré dans les variables de collection.');",
+                  "}",
+                  "pm.test('Login réussi (200)', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"admin@local.dev\",\n  \"password\": \"{{adminPassword}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/auth/login",
+              "host": ["{{baseUrl}}"],
+              "path": ["auth", "login"]
+            },
+            "description": "Connexion. Le token d'accès (`data.accessToken`) est stocké automatiquement dans la variable `accessToken`."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Prérequis (modules 02 & 03)",
+      "item": [
+        {
+          "name": "Créer un client",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const json = pm.response.json();",
+                  "if (json && json.success && json.data && json.data.id) {",
+                  "    pm.collectionVariables.set('customerId', json.data.id);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"type\": \"CUSTOMER\",\n  \"companyName\": \"ACME Industries\",\n  \"email\": \"compta@acme-industries.fr\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/contacts",
+              "host": ["{{baseUrl}}"],
+              "path": ["contacts"]
+            },
+            "description": "Route du module 02 — le client facturé."
+          }
+        },
+        {
+          "name": "Créer un produit",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const json = pm.response.json();",
+                  "if (json && json.success && json.data && json.data.id) {",
+                  "    pm.collectionVariables.set('productId', json.data.id);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Écran Dell 27\\\" QHD\",\n  \"type\": \"PRODUCT\",\n  \"unit\": \"UNIT\",\n  \"unitPrice\": 349.90\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/products",
+              "host": ["{{baseUrl}}"],
+              "path": ["products"]
+            },
+            "description": "Route du module 03 — la ligne de facture copiera son prix (figé)."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Factures",
+      "item": [
+        {
+          "name": "1 · Créer une facture manuelle",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const json = pm.response.json();",
+                  "if (json && json.success && json.data && json.data.id) {",
+                  "    pm.collectionVariables.set('invoiceId', json.data.id);",
+                  "    console.log('invoiceId = ' + json.data.id + ' — ' + json.data.number + ' — TTC : ' + json.data.totalTTC + ' — reste à payer : ' + json.data.remainingAmount);",
+                  "}",
+                  "pm.test('Créée (201)', () => pm.response.to.have.status(201));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"customerId\": \"{{customerId}}\",\n  \"notes\": \"Matériel + installation, juillet 2026.\",\n  \"lines\": [\n    {\n      \"productId\": \"{{productId}}\",\n      \"quantity\": 2\n    },\n    {\n      \"description\": \"Installation sur site\",\n      \"quantity\": 2.5,\n      \"unitPrice\": 85\n    }\n  ]\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/invoices",
+              "host": ["{{baseUrl}}"],
+              "path": ["invoices"]
+            },
+            "description": "**Accès : ADMIN, MANAGER.** Numéro `FAC-YYYY-0001`, statut DRAFT, échéance +30 j par défaut. Attendu : HT 912.30, TVA 182.46, TTC 1094.76 — et `remainingAmount` = TTC (rien d'encaissé avant le module 08)."
+          }
+        },
+        {
+          "name": "2 · Lister (filtres)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/invoices?page=1&limit=20",
+              "host": ["{{baseUrl}}"],
+              "path": ["invoices"],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "limit",
+                  "value": "20"
+                },
+                {
+                  "key": "type",
+                  "value": "CREDIT_NOTE",
+                  "description": "INVOICE | CREDIT_NOTE",
+                  "disabled": true
+                },
+                {
+                  "key": "status",
+                  "value": "SENT",
+                  "description": "DRAFT | SENT | PARTIALLY_PAID | PAID | OVERDUE | CANCELLED",
+                  "disabled": true
+                },
+                {
+                  "key": "customerId",
+                  "value": "{{customerId}}",
+                  "disabled": true
+                },
+                {
+                  "key": "from",
+                  "value": "2026-01-01",
+                  "description": "Bornes sur la date d'ÉMISSION",
+                  "disabled": true
+                },
+                {
+                  "key": "to",
+                  "value": "2026-12-31",
+                  "disabled": true
+                },
+                {
+                  "key": "search",
+                  "value": "FAC-2026",
+                  "description": "Recherche sur numéro et nom du client",
+                  "disabled": true
+                },
+                {
+                  "key": "sortBy",
+                  "value": "dueDate",
+                  "description": "number | type | status | issueDate | dueDate | totalTTC | customerName | createdAt",
+                  "disabled": true
+                }
+              ]
+            },
+            "description": "**Accès : tout connecté.** Liste paginée avec le nom du client — sans les lignes."
+          }
+        },
+        {
+          "name": "3 · Détail (lignes + reste à payer)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/invoices/{{invoiceId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["invoices", "{{invoiceId}}"]
+            },
+            "description": "**Accès : tout connecté.** `remainingAmount` est calculé à la volée (jamais stocké)."
+          }
+        },
+        {
+          "name": "4 · Modifier le brouillon",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"dueDate\": \"2026-09-15\",\n  \"notes\": \"Échéance étendue à 60 jours (accord commercial).\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/invoices/{{invoiceId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["invoices", "{{invoiceId}}"]
+            },
+            "description": "**Accès : ADMIN, MANAGER.** DRAFT uniquement — dernière chance de corriger avant émission. Une échéance antérieure à l'émission serait refusée (409)."
+          }
+        },
+        {
+          "name": "5 · ÉMETTRE (le point de non-retour)",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/invoices/{{invoiceId}}/send",
+              "host": ["{{baseUrl}}"],
+              "path": ["invoices", "{{invoiceId}}", "send"]
+            },
+            "description": "**Accès : ADMIN, MANAGER.** DRAFT → SENT. Après cet appel, la facture ne se modifie plus JAMAIS (pièce comptable) — seule correction possible : l'avoir. Version mini : pas encore de PDF ni d'e-mail (niveau min-)."
+          }
+        },
+        {
+          "name": "6 · Créer un brouillon jetable (pour cancel/delete)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const json = pm.response.json();",
+                  "if (json && json.success && json.data && json.data.id) {",
+                  "    pm.collectionVariables.set('draftInvoiceId', json.data.id);",
+                  "    console.log('draftInvoiceId = ' + json.data.id + ' — ' + json.data.number);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"customerId\": \"{{customerId}}\",\n  \"lines\": [\n    {\n      \"description\": \"Prestation annulée\",\n      \"quantity\": 1,\n      \"unitPrice\": 100\n    }\n  ]\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/invoices",
+              "host": ["{{baseUrl}}"],
+              "path": ["invoices"]
+            },
+            "description": "Sert aux démos d'annulation et de suppression. Regarde son numéro : la séquence FAC- a continué."
+          }
+        },
+        {
+          "name": "7 · Annuler le brouillon (ou le supprimer)",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/invoices/{{draftInvoiceId}}/cancel",
+              "host": ["{{baseUrl}}"],
+              "path": ["invoices", "{{draftInvoiceId}}", "cancel"]
+            },
+            "description": "**Accès : ADMIN, MANAGER.** Annulation : DRAFT ou SENT uniquement. Alternative sur un brouillon : `DELETE /invoices/:id` (204, suppression physique). Une facture payée, même partiellement, ne s'annule plus — avoir obligatoire."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Avoirs",
+      "item": [
+        {
+          "name": "1 · Avoir PARTIEL sur la facture émise",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const json = pm.response.json();",
+                  "if (json && json.success && json.data && json.data.id) {",
+                  "    pm.collectionVariables.set('creditNoteId', json.data.id);",
+                  "    console.log('Avoir ' + json.data.number + ' — lié à la facture ' + json.data.creditNoteForId + ' — TTC : ' + json.data.totalTTC + ' (positif : le type porte le sens)');",
+                  "}",
+                  "pm.test('Créé (201)', () => pm.response.to.have.status(201));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"notes\": \"Un écran arrivé fissuré — remboursement.\",\n  \"lines\": [\n    {\n      \"productId\": \"{{productId}}\",\n      \"quantity\": 1,\n      \"unitPrice\": 349.90\n    }\n  ]\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/invoices/{{invoiceId}}/credit-note",
+              "host": ["{{baseUrl}}"],
+              "path": ["invoices", "{{invoiceId}}", "credit-note"]
+            },
+            "description": "**Accès : ADMIN, MANAGER.** Avoir PARTIEL (lignes fournies) : `AV-YYYY-0001`, type `CREDIT_NOTE`, `creditNoteForId` = la facture source, TTC 419.88 en POSITIF.\n\nVariante : body `{}` (sans lignes) = avoir TOTAL, copie intégrale de la source."
+          }
+        },
+        {
+          "name": "2 · L'avoir dans la liste (type=CREDIT_NOTE)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/invoices?type=CREDIT_NOTE",
+              "host": ["{{baseUrl}}"],
+              "path": ["invoices"],
+              "query": [
+                {
+                  "key": "type",
+                  "value": "CREDIT_NOTE"
+                }
+              ]
+            },
+            "description": "Les avoirs vivent dans la même table que les factures — le filtre `type` les isole."
+          }
+        },
+        {
+          "name": "3 · Émettre l'avoir",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/invoices/{{creditNoteId}}/send",
+              "host": ["{{baseUrl}}"],
+              "path": ["invoices", "{{creditNoteId}}", "send"]
+            },
+            "description": "Un avoir suit le même cycle de vie qu'une facture : DRAFT → SENT."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Commande → Facture",
+      "item": [
+        {
+          "name": "1 · Commande de service, livrée (sans stock)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const json = pm.response.json();",
+                  "if (json && json.success && json.data && json.data.id) {",
+                  "    pm.collectionVariables.set('orderId', json.data.id);",
+                  "    console.log('orderId = ' + json.data.id + ' — ' + json.data.number + '. Enchaîne : confirm → start → complete.');",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"type\": \"CUSTOMER\",\n  \"contactId\": \"{{customerId}}\",\n  \"lines\": [\n    {\n      \"description\": \"Audit réseau complet\",\n      \"quantity\": 1,\n      \"unitPrice\": 1200\n    }\n  ]\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/orders",
+              "host": ["{{baseUrl}}"],
+              "path": ["orders"]
+            },
+            "description": "Route du module 06. Ligne libre (service) : la livraison ne touchera pas au stock — pas d'entrepôt nécessaire."
+          }
+        },
+        {
+          "name": "2 · Confirmer",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/orders/{{orderId}}/confirm",
+              "host": ["{{baseUrl}}"],
+              "path": ["orders", "{{orderId}}", "confirm"]
+            },
+            "description": ""
+          }
+        },
+        {
+          "name": "3 · Départ",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/orders/{{orderId}}/start",
+              "host": ["{{baseUrl}}"],
+              "path": ["orders", "{{orderId}}", "start"]
+            },
+            "description": "Aucune ligne stockée : pas de warehouseId requis."
+          }
+        },
+        {
+          "name": "4 · Livrer",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/orders/{{orderId}}/complete",
+              "host": ["{{baseUrl}}"],
+              "path": ["orders", "{{orderId}}", "complete"]
+            },
+            "description": "La commande passe DELIVERED : elle devient facturable."
+          }
+        },
+        {
+          "name": "5 · FACTURER la commande",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const json = pm.response.json();",
+                  "if (json && json.success && json.data && json.data.id) {",
+                  "    pm.collectionVariables.set('orderInvoiceId', json.data.id);",
+                  "    console.log('Facture ' + json.data.number + ' créée depuis la commande (orderId = ' + json.data.orderId + ')');",
+                  "}",
+                  "pm.test('Facturée (201)', () => pm.response.to.have.status(201));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/orders/{{orderId}}/invoice",
+              "host": ["{{baseUrl}}"],
+              "path": ["orders", "{{orderId}}", "invoice"]
+            },
+            "description": "**Accès : ADMIN, MANAGER.** Crée une facture DRAFT avec les lignes de la commande (prix figés), `orderId` tracé. Relancer → 409 (une commande ne se facture qu'une fois)."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Scénarios d'erreur (démo)",
+      "item": [
+        {
+          "name": "409 — modifier une facture émise",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"notes\": \"Trop tard : la facture est émise.\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/invoices/{{invoiceId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["invoices", "{{invoiceId}}"]
+            },
+            "description": "À lancer APRÈS l'émission : attendu **409 `BUSINESS_RULE_VIOLATION`** — une facture émise se corrige par un avoir, jamais par modification."
+          }
+        },
+        {
+          "name": "409 — avoir sur un brouillon",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/invoices/{{draftInvoiceId}}/credit-note",
+              "host": ["{{baseUrl}}"],
+              "path": ["invoices", "{{draftInvoiceId}}", "credit-note"]
+            },
+            "description": "Attendu **409** : un brouillon se corrige DIRECTEMENT (PATCH), l'avoir est réservé aux factures émises. (Si tu as annulé/supprimé le brouillon jetable, recrée-en un.)"
+          }
+        },
+        {
+          "name": "409 — avoir sur un avoir",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/invoices/{{creditNoteId}}/credit-note",
+              "host": ["{{baseUrl}}"],
+              "path": ["invoices", "{{creditNoteId}}", "credit-note"]
+            },
+            "description": "Attendu **409** : on ne corrige pas une correction — on refacture si besoin."
+          }
+        },
+        {
+          "name": "409 — facturer une commande non livrée",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/orders/{{orderId}}/invoice",
+              "host": ["{{baseUrl}}"],
+              "path": ["orders", "{{orderId}}", "invoice"]
+            },
+            "description": "Sur une commande déjà facturée : attendu **409** « déjà facturée ». Sur une commande DRAFT/CONFIRMED : **409** « seule une commande livrée peut être facturée » — on facture ce qui a été livré, pas ce qui a été promis."
+          }
+        },
+        {
+          "name": "409 — échéance antérieure à l'émission",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"customerId\": \"{{customerId}}\",\n  \"dueDate\": \"2020-01-01\",\n  \"lines\": [\n    {\n      \"description\": \"Test\",\n      \"quantity\": 1,\n      \"unitPrice\": 10\n    }\n  ]\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/invoices",
+              "host": ["{{baseUrl}}"],
+              "path": ["invoices"]
+            },
+            "description": "Attendu **409** : une facture ne peut pas naître déjà en retard."
+          }
+        }
+      ]
+    }
+  ]
+}

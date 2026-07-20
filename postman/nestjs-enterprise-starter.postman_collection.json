@@ -1,0 +1,384 @@
+{
+  "info": {
+    "_postman_id": "b1f7c2a0-0000-4000-8000-nestjsstarter",
+    "name": "nestjs-enterprise-starter",
+    "description": "Collection de l'API du socle back-end d'entreprise.\n\nOrdre conseillé : Santé → Login → endpoints protégés.\n\nLe cookie HttpOnly `refresh_token` est géré automatiquement par Postman (cookie jar). L'access token est enregistré dans la variable d'environnement `accessToken` par le script du login.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": {
+    "type": "bearer",
+    "bearer": [{ "key": "token", "value": "{{accessToken}}", "type": "string" }]
+  },
+  "event": [
+    {
+      "listen": "test",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "// Vérifications communes à toutes les requêtes JSON enveloppées.",
+          "const contentType = pm.response.headers.get('Content-Type') || '';",
+          "if (contentType.includes('application/json')) {",
+          "  pm.test('Enveloppe : propriété success présente', function () {",
+          "    pm.expect(pm.response.json()).to.have.property('success');",
+          "  });",
+          "}",
+          "pm.test('En-tête x-request-id présent', function () {",
+          "  pm.expect(pm.response.headers.get('x-request-id')).to.not.be.undefined;",
+          "});"
+        ]
+      }
+    }
+  ],
+  "item": [
+    {
+      "name": "Santé",
+      "item": [
+        {
+          "name": "Synthèse de santé",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "GET",
+            "url": "{{baseUrl}}/api/v1/health"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Statut 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Base de données up', () => {",
+                  "  pm.expect(pm.response.json().data.status).to.eql('ok');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Liveness",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "GET",
+            "url": "{{baseUrl}}/api/v1/health/live"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": ["pm.test('Statut 200', () => pm.response.to.have.status(200));"]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Readiness",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "GET",
+            "url": "{{baseUrl}}/api/v1/health/ready"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": ["pm.test('Statut 200', () => pm.response.to.have.status(200));"]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Authentification",
+      "item": [
+        {
+          "name": "Login",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{userEmail}}\",\n  \"password\": \"{{userPassword}}\"\n}"
+            },
+            "url": "{{baseUrl}}/api/v1/auth/login"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Statut 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('Access token présent', () => {",
+                  "  pm.expect(body.data.accessToken).to.be.a('string');",
+                  "});",
+                  "// Enregistrement automatique de l'access token.",
+                  "pm.environment.set('accessToken', body.data.accessToken);",
+                  "pm.environment.set('userId', body.data.user.id);",
+                  "pm.test('Refresh token absent du corps (cookie uniquement)', () => {",
+                  "  pm.expect(JSON.stringify(body)).to.not.include('refreshToken');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Refresh (rotation des jetons)",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "url": "{{baseUrl}}/api/v1/auth/refresh"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Statut 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "// Le nouveau jeton remplace l'ancien.",
+                  "pm.environment.set('accessToken', body.data.accessToken);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Profil (me)",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/v1/auth/me"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Statut 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Profil complet', () => {",
+                  "  const data = pm.response.json().data;",
+                  "  pm.expect(data).to.have.keys(['id', 'email', 'displayName']);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Sessions actives",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/v1/auth/sessions"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Statut 200', () => pm.response.to.have.status(200));",
+                  "const sessions = pm.response.json().data;",
+                  "pm.test('Au moins une session', () => {",
+                  "  pm.expect(sessions.length).to.be.at.least(1);",
+                  "});",
+                  "// Enregistre une session NON courante à révoquer, sinon la courante.",
+                  "const target = sessions.find(s => !s.isCurrent) || sessions[0];",
+                  "pm.environment.set('sessionIdToRevoke', target.id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Révoquer une session",
+          "request": {
+            "method": "DELETE",
+            "url": "{{baseUrl}}/api/v1/auth/sessions/{{sessionIdToRevoke}}"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": ["pm.test('Statut 204', () => pm.response.to.have.status(204));"]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Logout (session courante)",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/api/v1/auth/logout"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Statut 204', () => pm.response.to.have.status(204));",
+                  "pm.environment.unset('accessToken');"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Logout de toutes les sessions",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/api/v1/auth/logout-all"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Statut 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Nombre de sessions révoquées renvoyé', () => {",
+                  "  pm.expect(pm.response.json().data.revokedSessions).to.be.a('number');",
+                  "});",
+                  "pm.environment.unset('accessToken');"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Démonstration technique",
+      "description": "Nécessite TECHNICAL_DEMO_ENDPOINTS_ENABLED=true et un login préalable.",
+      "item": [
+        {
+          "name": "Envoi d'un e-mail de démonstration",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"recipient\": \"destinataire@example.com\"\n}"
+            },
+            "url": "{{baseUrl}}/api/v1/technical-demo/mail"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Statut 200', () => pm.response.to.have.status(200));",
+                  "pm.test('E-mail traité', () => {",
+                  "  pm.expect(pm.response.json().data.delivered).to.be.true;",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Dépôt d'un fichier",
+          "request": {
+            "method": "POST",
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "file",
+                  "type": "file",
+                  "src": [],
+                  "description": "Sélectionner un fichier (types autorisés : voir STORAGE_ALLOWED_MIME_TYPES)"
+                }
+              ]
+            },
+            "url": "{{baseUrl}}/api/v1/technical-demo/files"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Statut 201', () => pm.response.to.have.status(201));",
+                  "// Identifiant conservé pour le téléchargement et la suppression.",
+                  "pm.environment.set('fileId', pm.response.json().data.identifier);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Téléchargement d'un fichier",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/v1/technical-demo/files/{{fileId}}"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Statut 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Réponse binaire avec Content-Disposition', () => {",
+                  "  pm.expect(pm.response.headers.get('Content-Disposition')).to.include('attachment');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Suppression d'un fichier",
+          "request": {
+            "method": "DELETE",
+            "url": "{{baseUrl}}/api/v1/technical-demo/files/{{fileId}}"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": ["pm.test('Statut 204', () => pm.response.to.have.status(204));"]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Génération du PDF de démonstration",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/v1/technical-demo/pdf"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Statut 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Content-Type PDF', () => {",
+                  "  pm.expect(pm.response.headers.get('Content-Type')).to.include('application/pdf');",
+                  "});",
+                  "pm.test('Signature PDF valide', () => {",
+                  "  pm.expect(pm.response.text().substring(0, 5)).to.eql('%PDF-');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

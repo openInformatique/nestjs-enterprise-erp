@@ -1,0 +1,436 @@
+{
+  "info": {
+    "name": "ERP — 09 · Tableau de Bord",
+    "description": "Collection du module 09 (guide mini-DEV-09).\n\n**Avant de commencer** :\n1. Renseigne la variable de collection `adminPassword` (onglet Variables).\n2. Lance « Auth / Login (admin) ».\n3. Le tableau de bord ne montre que ce qui EXISTE : sur une base vide, tout est à zéro (sans erreur). Déroule « Prérequis (activité minimale) » pour fabriquer du CA, un pipe de devis et une alerte de stock — ou, mieux, rejoue d'abord les collections des modules 04 à 08.\n\nLe module est 100 % LECTURE : aucune entité, aucune table — 8 requêtes SQL agrégées lancées en parallèle (Promise.all), calculées à la volée à chaque appel (pas de cache au niveau mini).\n\nCA = factures de type INVOICE au statut PAID uniquement. Créances = reste à encaisser (TTC - payé). Alertes de stock = produits PRODUCT actifs sous le seuil (défaut : 5).\n\nEnveloppe de réponse : `{ success, data, meta }` — succès ; `{ success, error: { code, message }, meta }` — erreur.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{accessToken}}",
+        "type": "string"
+      }
+    ]
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:3000/api/v1",
+      "type": "string"
+    },
+    {
+      "key": "adminPassword",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "accessToken",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "customerId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "productId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "invoiceId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "warehouseId",
+      "value": "",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "Auth",
+      "item": [
+        {
+          "name": "Login (admin)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const json = pm.response.json();",
+                  "if (json && json.success && json.data && json.data.accessToken) {",
+                  "    pm.collectionVariables.set('accessToken', json.data.accessToken);",
+                  "    console.log('accessToken enregistré dans les variables de collection.');",
+                  "}",
+                  "pm.test('Login réussi (200)', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"admin@local.dev\",\n  \"password\": \"{{adminPassword}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/auth/login",
+              "host": ["{{baseUrl}}"],
+              "path": ["auth", "login"]
+            },
+            "description": "Connexion. Le token d'accès (`data.accessToken`) est stocké automatiquement dans la variable `accessToken`."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Prérequis (activité minimale)",
+      "item": [
+        {
+          "name": "1 · Créer un client",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const json = pm.response.json();",
+                  "if (json && json.success && json.data && json.data.id) {",
+                  "    pm.collectionVariables.set('customerId', json.data.id);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"type\": \"CUSTOMER\",\n  \"companyName\": \"ACME Industries\",\n  \"email\": \"compta@acme-industries.fr\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/contacts",
+              "host": ["{{baseUrl}}"],
+              "path": ["contacts"]
+            },
+            "description": "Route du module 02 — il apparaîtra dans le top clients."
+          }
+        },
+        {
+          "name": "2 · Créer un produit",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const json = pm.response.json();",
+                  "if (json && json.success && json.data && json.data.id) {",
+                  "    pm.collectionVariables.set('productId', json.data.id);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Écran Dell 27\\\" QHD\",\n  \"type\": \"PRODUCT\",\n  \"unit\": \"UNIT\",\n  \"unitPrice\": 349.90\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/products",
+              "host": ["{{baseUrl}}"],
+              "path": ["products"]
+            },
+            "description": "Route du module 03 — type PRODUCT : il pourra déclencher une alerte de stock."
+          }
+        },
+        {
+          "name": "3 · Créer une facture",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const json = pm.response.json();",
+                  "if (json && json.success && json.data && json.data.id) {",
+                  "    pm.collectionVariables.set('invoiceId', json.data.id);",
+                  "    console.log('invoiceId = ' + json.data.id + ' — ' + json.data.number + ' — TTC : ' + json.data.totalTTC);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"customerId\": \"{{customerId}}\",\n  \"lines\": [\n    {\n      \"productId\": \"{{productId}}\",\n      \"quantity\": 2\n    }\n  ]\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/invoices",
+              "host": ["{{baseUrl}}"],
+              "path": ["invoices"]
+            },
+            "description": "Route du module 07. TTC attendu : 839.76 — le futur CA du mois."
+          }
+        },
+        {
+          "name": "4 · Émettre la facture",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/invoices/{{invoiceId}}/send",
+              "host": ["{{baseUrl}}"],
+              "path": ["invoices", "{{invoiceId}}", "send"]
+            },
+            "description": "DRAFT → SENT : elle devient encaissable."
+          }
+        },
+        {
+          "name": "5 · La PAYER intégralement (839.76)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"invoiceId\": \"{{invoiceId}}\",\n  \"amount\": 839.76,\n  \"method\": \"BANK_TRANSFER\",\n  \"reference\": \"VIR-DEMO-DASHBOARD\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/payments",
+              "host": ["{{baseUrl}}"],
+              "path": ["payments"]
+            },
+            "description": "Route du module 08. La facture passe PAID → du CA pour le dashboard (le CA ne compte QUE les factures PAID)."
+          }
+        },
+        {
+          "name": "6 · Créer un devis (le pipe commercial)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"customerId\": \"{{customerId}}\",\n  \"lines\": [\n    {\n      \"productId\": \"{{productId}}\",\n      \"quantity\": 1\n    }\n  ]\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/quotes",
+              "host": ["{{baseUrl}}"],
+              "path": ["quotes"]
+            },
+            "description": "Route du module 05 — il comptera dans quotesPipeline.draftCount."
+          }
+        },
+        {
+          "name": "7 · Créer un entrepôt",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const json = pm.response.json();",
+                  "if (json && json.success && json.data && json.data.id) {",
+                  "    pm.collectionVariables.set('warehouseId', json.data.id);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Entrepôt Paris Nord\",\n  \"code\": \"WH-PARIS\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/warehouses",
+              "host": ["{{baseUrl}}"],
+              "path": ["warehouses"]
+            },
+            "description": "Route du module 04."
+          }
+        },
+        {
+          "name": "8 · Entrer 2 unités (sous le seuil de 5 → alerte)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"productId\": \"{{productId}}\",\n  \"warehouseId\": \"{{warehouseId}}\",\n  \"quantity\": 2,\n  \"reference\": \"DEMO-DASHBOARD\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/stock/in",
+              "host": ["{{baseUrl}}"],
+              "path": ["stock", "in"]
+            },
+            "description": "Route du module 04. 2 < 5 (seuil par défaut) : le produit apparaîtra dans stockAlerts."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Tableau de bord",
+      "item": [
+        {
+          "name": "1 · Le tableau de bord complet (seuil par défaut : 5)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const json = pm.response.json();",
+                  "pm.test('OK (200)', () => pm.response.to.have.status(200));",
+                  "pm.test('Structure complète', () => {",
+                  "    const data = json.data;",
+                  "    pm.expect(data).to.have.property('revenue');",
+                  "    pm.expect(data).to.have.property('invoices');",
+                  "    pm.expect(data).to.have.property('activeOrders');",
+                  "    pm.expect(data).to.have.property('quotesPipeline');",
+                  "    pm.expect(data).to.have.property('topCustomers');",
+                  "    pm.expect(data).to.have.property('recentOrders');",
+                  "    pm.expect(data).to.have.property('recentInvoices');",
+                  "    pm.expect(data).to.have.property('stockAlerts');",
+                  "});",
+                  "if (json && json.success && json.data) {",
+                  "    const d = json.data;",
+                  "    console.log('CA mois courant : ' + d.revenue.currentMonth + ' € — YTD : ' + d.revenue.ytd + ' €');",
+                  "    console.log('Créances — SENT : ' + d.invoices.pendingCount + ' (' + d.invoices.pendingAmount + ' €), OVERDUE : ' + d.invoices.overdueCount + ' (' + d.invoices.overdueAmount + ' €), PARTIEL : ' + d.invoices.partialCount + ' (' + d.invoices.partialAmount + ' €)');",
+                  "    console.log('Pipe devis — brouillons : ' + d.quotesPipeline.draftCount + ', envoyés : ' + d.quotesPipeline.sentCount + ', acceptés : ' + d.quotesPipeline.acceptedCount);",
+                  "    console.log('Commandes actives : ' + d.activeOrders + ' — Alertes de stock : ' + d.stockAlerts.length);",
+                  "    if (d.topCustomers.length > 0) {",
+                  "        console.log('Top client : ' + d.topCustomers[0].companyName + ' (' + d.topCustomers[0].totalRevenue + ' €)');",
+                  "    }",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/dashboard",
+              "host": ["{{baseUrl}}"],
+              "path": ["dashboard"]
+            },
+            "description": "**Accès : ADMIN, MANAGER.** Tout l'écran en un appel — 8 requêtes SQL agrégées lancées en parallèle, calculées à la volée (pas de cache).\n\nAprès les prérequis, attendu : `revenue.currentMonth = 839.76`, `quotesPipeline.draftCount ≥ 1`, `topCustomers[0] = ACME Industries`, `recentInvoices[0].status = PAID`, une alerte de stock (2 < 5).\n\nRegarde la console Postman : les chiffres clés y sont résumés."
+          }
+        },
+        {
+          "name": "2 · Seuil d'alertes personnalisé (10)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const json = pm.response.json();",
+                  "pm.test('OK (200)', () => pm.response.to.have.status(200));",
+                  "if (json && json.success && json.data) {",
+                  "    console.log('Alertes avec seuil 10 : ' + json.data.stockAlerts.length + ' — chaque alerte porte threshold = 10.');",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/dashboard?stockAlertThreshold=10",
+              "host": ["{{baseUrl}}"],
+              "path": ["dashboard"],
+              "query": [
+                {
+                  "key": "stockAlertThreshold",
+                  "value": "10",
+                  "description": "Quantité strictement inférieure au seuil (défaut : 5)"
+                }
+              ]
+            },
+            "description": "Le seuil remonte : plus de produits en alerte. À l'inverse, `stockAlertThreshold=1` doit vider la liste (2 n'est pas < 1)."
+          }
+        },
+        {
+          "name": "3 · 400 — seuil négatif (validation)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/dashboard?stockAlertThreshold=-1",
+              "host": ["{{baseUrl}}"],
+              "path": ["dashboard"],
+              "query": [
+                {
+                  "key": "stockAlertThreshold",
+                  "value": "-1"
+                }
+              ]
+            },
+            "description": "Attendu **400 `VALIDATION_ERROR`** : le DTO refuse un seuil négatif avant toute requête SQL."
+          }
+        }
+      ]
+    }
+  ]
+}

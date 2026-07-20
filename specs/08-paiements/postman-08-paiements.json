@@ -1,0 +1,653 @@
+{
+  "info": {
+    "name": "ERP — 08 · Paiements & Impayés",
+    "description": "Collection du module 08 (guide mini-DEV-08).\n\n**Avant de commencer** :\n1. Renseigne la variable de collection `adminPassword` (onglet Variables).\n2. Lance « Auth / Login (admin) ».\n3. Déroule « Prérequis » (client + produit + facture ÉMISE), puis « Paiements » DANS L'ORDRE : encaissement partiel → solde → suppression du solde. Les « Scénarios d'erreur » se lancent au moment indiqué dans leur description.\n\nCycle de vie de la facture, vu du module 08 : `SENT → PARTIALLY_PAID → PAID` (encaissements) ; `OVERDUE` (cron 02:00, module 07) ; suppression d'un paiement = recalcul en sens inverse.\nRègle d'or : `paidAmount` = SOMME du journal des paiements — jamais incrémenté. Un paiement ne se modifie pas : il se supprime (ADMIN) et tout se recalcule.\n\nEnveloppe de réponse : `{ success, data, meta }` — succès ; `{ success, error: { code, message }, meta }` — erreur.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{accessToken}}",
+        "type": "string"
+      }
+    ]
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:3000/api/v1",
+      "type": "string"
+    },
+    {
+      "key": "adminPassword",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "accessToken",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "customerId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "productId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "invoiceId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "draftInvoiceId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "paymentId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "balancePaymentId",
+      "value": "",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "Auth",
+      "item": [
+        {
+          "name": "Login (admin)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const json = pm.response.json();",
+                  "if (json && json.success && json.data && json.data.accessToken) {",
+                  "    pm.collectionVariables.set('accessToken', json.data.accessToken);",
+                  "    console.log('accessToken enregistré dans les variables de collection.');",
+                  "}",
+                  "pm.test('Login réussi (200)', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"admin@local.dev\",\n  \"password\": \"{{adminPassword}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/auth/login",
+              "host": ["{{baseUrl}}"],
+              "path": ["auth", "login"]
+            },
+            "description": "Connexion. Le token d'accès (`data.accessToken`) est stocké automatiquement dans la variable `accessToken`."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Prérequis (modules 02, 03 & 07)",
+      "item": [
+        {
+          "name": "1 · Créer un client",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const json = pm.response.json();",
+                  "if (json && json.success && json.data && json.data.id) {",
+                  "    pm.collectionVariables.set('customerId', json.data.id);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"type\": \"CUSTOMER\",\n  \"companyName\": \"ACME Industries\",\n  \"email\": \"compta@acme-industries.fr\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/contacts",
+              "host": ["{{baseUrl}}"],
+              "path": ["contacts"]
+            },
+            "description": "Route du module 02. L'e-mail servira au résumé des impayés (qui relancer, où)."
+          }
+        },
+        {
+          "name": "2 · Créer un produit",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const json = pm.response.json();",
+                  "if (json && json.success && json.data && json.data.id) {",
+                  "    pm.collectionVariables.set('productId', json.data.id);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Écran Dell 27\\\" QHD\",\n  \"type\": \"PRODUCT\",\n  \"unit\": \"UNIT\",\n  \"unitPrice\": 349.90\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/products",
+              "host": ["{{baseUrl}}"],
+              "path": ["products"]
+            },
+            "description": "Route du module 03."
+          }
+        },
+        {
+          "name": "3 · Créer la facture à encaisser",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const json = pm.response.json();",
+                  "if (json && json.success && json.data && json.data.id) {",
+                  "    pm.collectionVariables.set('invoiceId', json.data.id);",
+                  "    console.log('invoiceId = ' + json.data.id + ' — ' + json.data.number + ' — TTC : ' + json.data.totalTTC);",
+                  "}",
+                  "pm.test('Créée (201)', () => pm.response.to.have.status(201));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"customerId\": \"{{customerId}}\",\n  \"notes\": \"Matériel + installation, juillet 2026.\",\n  \"lines\": [\n    {\n      \"productId\": \"{{productId}}\",\n      \"quantity\": 2\n    },\n    {\n      \"description\": \"Installation sur site\",\n      \"quantity\": 2.5,\n      \"unitPrice\": 85\n    }\n  ]\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/invoices",
+              "host": ["{{baseUrl}}"],
+              "path": ["invoices"]
+            },
+            "description": "Route du module 07. Attendu : TTC **1094.76** — retiens ce montant, tout le scénario d'encaissement tourne autour (500 + 594.76)."
+          }
+        },
+        {
+          "name": "4 · ÉMETTRE la facture (elle devient encaissable)",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/invoices/{{invoiceId}}/send",
+              "host": ["{{baseUrl}}"],
+              "path": ["invoices", "{{invoiceId}}", "send"]
+            },
+            "description": "DRAFT → SENT. Seules les factures ÉMISES (SENT, OVERDUE, PARTIALLY_PAID) acceptent un paiement."
+          }
+        },
+        {
+          "name": "5 · Créer un brouillon (pour le scénario d'erreur)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const json = pm.response.json();",
+                  "if (json && json.success && json.data && json.data.id) {",
+                  "    pm.collectionVariables.set('draftInvoiceId', json.data.id);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"customerId\": \"{{customerId}}\",\n  \"lines\": [\n    {\n      \"description\": \"Prestation non émise\",\n      \"quantity\": 1,\n      \"unitPrice\": 10\n    }\n  ]\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/invoices",
+              "host": ["{{baseUrl}}"],
+              "path": ["invoices"]
+            },
+            "description": "Reste en DRAFT : servira à prouver qu'une facture non émise refuse tout paiement (409)."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Paiements",
+      "item": [
+        {
+          "name": "1 · Encaissement PARTIEL (500 € par virement)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const json = pm.response.json();",
+                  "if (json && json.success && json.data && json.data.id) {",
+                  "    pm.collectionVariables.set('paymentId', json.data.id);",
+                  "    console.log('paymentId = ' + json.data.id + ' — ' + json.data.amount + ' € (' + json.data.method + ')');",
+                  "}",
+                  "pm.test('Enregistré (201)', () => pm.response.to.have.status(201));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"invoiceId\": \"{{invoiceId}}\",\n  \"amount\": 500,\n  \"method\": \"BANK_TRANSFER\",\n  \"reference\": \"VIR-2026-07-1842\",\n  \"notes\": \"Acompte reçu.\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/payments",
+              "host": ["{{baseUrl}}"],
+              "path": ["payments"]
+            },
+            "description": "**Accès : ADMIN, MANAGER.** 500 € sur 1094.76 : la facture bascule AUTOMATIQUEMENT en `PARTIALLY_PAID`, `paidAmount` = 500 (recalculé par SOMME du journal, jamais incrémenté). `paidAt` absent = maintenant."
+          }
+        },
+        {
+          "name": "2 · La facture a basculé toute seule",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const json = pm.response.json();",
+                  "if (json && json.success && json.data) {",
+                  "    console.log(json.data.number + ' — statut : ' + json.data.status + ' — payé : ' + json.data.paidAmount + ' — reste : ' + json.data.remainingAmount);",
+                  "}",
+                  "pm.test('Statut PARTIALLY_PAID', () => {",
+                  "    pm.expect(pm.response.json().data.status).to.eql('PARTIALLY_PAID');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/invoices/{{invoiceId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["invoices", "{{invoiceId}}"]
+            },
+            "description": "Route du module 07. Attendu : `status = PARTIALLY_PAID`, `paidAmount = 500`, `remainingAmount = 594.76` — la promesse du 07 tenue par le 08."
+          }
+        },
+        {
+          "name": "3 · Lister (filtres)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/payments?page=1&limit=20",
+              "host": ["{{baseUrl}}"],
+              "path": ["payments"],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "limit",
+                  "value": "20"
+                },
+                {
+                  "key": "invoiceId",
+                  "value": "{{invoiceId}}",
+                  "description": "Les encaissements d'une facture",
+                  "disabled": true
+                },
+                {
+                  "key": "method",
+                  "value": "BANK_TRANSFER",
+                  "description": "BANK_TRANSFER | CARD | CASH | CHECK | OTHER",
+                  "disabled": true
+                },
+                {
+                  "key": "from",
+                  "value": "2026-07-01",
+                  "description": "Bornes sur la date de VALEUR (paidAt)",
+                  "disabled": true
+                },
+                {
+                  "key": "to",
+                  "value": "2026-07-31",
+                  "disabled": true
+                },
+                {
+                  "key": "sortBy",
+                  "value": "amount",
+                  "description": "paidAt | amount | method | createdAt (défaut : paidAt DESC)",
+                  "disabled": true
+                }
+              ]
+            },
+            "description": "**Accès : ADMIN, MANAGER.** Liste paginée du journal des encaissements."
+          }
+        },
+        {
+          "name": "4 · Détail d'un paiement",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/payments/{{paymentId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["payments", "{{paymentId}}"]
+            },
+            "description": "**Accès : ADMIN, MANAGER.** `recordedBy` trace qui a saisi l'encaissement."
+          }
+        },
+        {
+          "name": "5 · SOLDER la facture (594.76 € par chèque)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const json = pm.response.json();",
+                  "if (json && json.success && json.data && json.data.id) {",
+                  "    pm.collectionVariables.set('balancePaymentId', json.data.id);",
+                  "    console.log('balancePaymentId = ' + json.data.id + ' — la facture doit être PAID.');",
+                  "}",
+                  "pm.test('Enregistré (201)', () => pm.response.to.have.status(201));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"invoiceId\": \"{{invoiceId}}\",\n  \"amount\": 594.76,\n  \"method\": \"CHECK\",\n  \"reference\": \"CHQ 0004521\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/payments",
+              "host": ["{{baseUrl}}"],
+              "path": ["payments"]
+            },
+            "description": "500 + 594.76 = 1094.76 = TTC : `paidAmount >= totalTTC` → la facture passe **PAID**. L'égalité en flottants tombe juste : tout est arrondi au centime à chaque étape, et le montant est plafonné au solde."
+          }
+        },
+        {
+          "name": "6 · La facture est soldée",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Statut PAID, reste 0', () => {",
+                  "    const data = pm.response.json().data;",
+                  "    pm.expect(data.status).to.eql('PAID');",
+                  "    pm.expect(data.remainingAmount).to.eql(0);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/invoices/{{invoiceId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["invoices", "{{invoiceId}}"]
+            },
+            "description": "Attendu : `status = PAID`, `paidAmount = 1094.76`, `remainingAmount = 0`. (Version mini : pas encore d'e-mail de confirmation — niveau min-.)"
+          }
+        },
+        {
+          "name": "7 · SUPPRIMER le solde (ADMIN) — recalcul inverse",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Supprimé (204)', () => pm.response.to.have.status(204));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/payments/{{balancePaymentId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["payments", "{{balancePaymentId}}"]
+            },
+            "description": "**Accès : ADMIN seul.** Saisie erronée ? On ne MODIFIE pas un paiement (journal immuable) : on le supprime, et `paidAmount` + statut sont recalculés — la facture va redescendre en `PARTIALLY_PAID` (500 restants au journal)."
+          }
+        },
+        {
+          "name": "8 · La facture est redescendue",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Retour en PARTIALLY_PAID', () => {",
+                  "    pm.expect(pm.response.json().data.status).to.eql('PARTIALLY_PAID');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/invoices/{{invoiceId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["invoices", "{{invoiceId}}"]
+            },
+            "description": "Attendu : `PARTIALLY_PAID`, `paidAmount = 500`, `remainingAmount = 594.76`. (Si l'échéance était dépassée, le recalcul aurait posé OVERDUE directement.)"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Impayés",
+      "item": [
+        {
+          "name": "Résumé des impayés",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/payments/overdue",
+              "host": ["{{baseUrl}}"],
+              "path": ["payments", "overdue"],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1",
+                  "disabled": true
+                },
+                {
+                  "key": "limit",
+                  "value": "20",
+                  "disabled": true
+                }
+              ]
+            },
+            "description": "**Accès : ADMIN, MANAGER.** Factures `OVERDUE` + `PARTIALLY_PAID`, triées par reste à payer décroissant : tout ce qu'il faut pour relancer — client (nom, e-mail), `remainingAmount`, `daysOverdue`, paiements déjà reçus.\n\nLa facture du scénario y figure (PARTIALLY_PAID, daysOverdue 0). Pour voir un vrai retard : `UPDATE invoices SET due_date = '2026-01-01' WHERE number = 'FAC-...'` puis relance le cron du module 07 (02:00) — ou relis la note de l'étape 11 du guide.\n\nNB : cette route est déclarée AVANT `GET /payments/:id` dans le contrôleur — sinon « overdue » serait avalé comme un id (400)."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Scénarios d'erreur (démo)",
+      "item": [
+        {
+          "name": "409 — payer une facture NON émise (brouillon)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"invoiceId\": \"{{draftInvoiceId}}\",\n  \"amount\": 10,\n  \"method\": \"CASH\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/payments",
+              "host": ["{{baseUrl}}"],
+              "path": ["payments"]
+            },
+            "description": "Attendu **409 `BUSINESS_RULE_VIOLATION`** : seules les factures SENT, OVERDUE ou PARTIALLY_PAID sont encaissables — un brouillon n'est pas une créance."
+          }
+        },
+        {
+          "name": "409 — dépasser le reste à payer",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"invoiceId\": \"{{invoiceId}}\",\n  \"amount\": 9999,\n  \"method\": \"CARD\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/payments",
+              "host": ["{{baseUrl}}"],
+              "path": ["payments"]
+            },
+            "description": "Attendu **409** — le message donne le solde exact : « Le montant (9999 €) dépasse le solde restant de la facture FAC-... (594.76 €). »"
+          }
+        },
+        {
+          "name": "409 — payer une facture SOLDÉE",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"invoiceId\": \"{{invoiceId}}\",\n  \"amount\": 1,\n  \"method\": \"CASH\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/payments",
+              "host": ["{{baseUrl}}"],
+              "path": ["payments"]
+            },
+            "description": "À lancer quand la facture est PAID (entre les étapes 5 et 7 du dossier Paiements) : attendu **409** — une facture soldée ne reçoit plus rien."
+          }
+        },
+        {
+          "name": "400 — montant négatif (validation)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"invoiceId\": \"{{invoiceId}}\",\n  \"amount\": -50,\n  \"method\": \"CASH\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/payments",
+              "host": ["{{baseUrl}}"],
+              "path": ["payments"]
+            },
+            "description": "Attendu **400 `VALIDATION_ERROR`** (le DTO refuse avant toute logique) : un remboursement n'est pas un paiement négatif — c'est un avoir (module 07)."
+          }
+        }
+      ]
+    }
+  ]
+}

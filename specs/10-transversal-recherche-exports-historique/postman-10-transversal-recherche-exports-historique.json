@@ -1,0 +1,578 @@
+{
+  "info": {
+    "name": "ERP — 10 · Transversal (Recherche, Exports & Historique)",
+    "description": "Collection du module 10 (guide mini-DEV-10).\n\n**Avant de commencer** :\n1. Renseigne la variable de collection `adminPassword` (onglet Variables).\n2. Lance « Auth / Login (admin) ».\n3. Déroule « Prérequis » (client + produit), puis les dossiers dans l'ordre : Recherche → Exports → Audit & Historique.\n\n**À savoir avant de tester l'historique** : `GET /*/history` est une lecture fidèle du journal `audit_logs` — mais AUCUN use case métier (contacts, produits, devis, commandes, factures, paiements) n'appelle encore `AuditService.log()` (différé en « min- » depuis le module 02). Les endpoints `/*/history` répondront donc avec une liste VIDE pour toute ressource métier — ce n'est pas un bug de cette collection, c'est la dette documentée du guide. Seuls les événements du socle (`auth.*`) apparaissent dans `/audit-logs`.\n\nExports : CSV (UTF-8 + BOM) ou XLSX, SANS pagination, plafonnés à 10 000 lignes (422 au-delà).\n\nEnveloppe de réponse : `{ success, data, meta }` — succès JSON ; les exports sont des réponses BINAIRES (pas d'enveloppe, `@SkipResponseEnvelope`).",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{accessToken}}",
+        "type": "string"
+      }
+    ]
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:3000/api/v1",
+      "type": "string"
+    },
+    {
+      "key": "adminPassword",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "accessToken",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "customerId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "productId",
+      "value": "",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "Auth",
+      "item": [
+        {
+          "name": "Login (admin)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const json = pm.response.json();",
+                  "if (json && json.success && json.data && json.data.accessToken) {",
+                  "    pm.collectionVariables.set('accessToken', json.data.accessToken);",
+                  "    console.log('accessToken enregistré dans les variables de collection.');",
+                  "}",
+                  "pm.test('Login réussi (200)', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"admin@local.dev\",\n  \"password\": \"{{adminPassword}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/auth/login",
+              "host": ["{{baseUrl}}"],
+              "path": ["auth", "login"]
+            },
+            "description": "Connexion. Le token d'accès (`data.accessToken`) est stocké automatiquement dans la variable `accessToken`. Cet appel génère aussi le PREMIER événement visible dans `/audit-logs` (catégorie SECURITY, action `auth.login.success`)."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Prérequis (modules 02 & 03)",
+      "item": [
+        {
+          "name": "1 · Créer un client",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const json = pm.response.json();",
+                  "if (json && json.success && json.data && json.data.id) {",
+                  "    pm.collectionVariables.set('customerId', json.data.id);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"type\": \"CUSTOMER\",\n  \"companyName\": \"ACME Industries\",\n  \"email\": \"compta@acme-industries.fr\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/contacts",
+              "host": ["{{baseUrl}}"],
+              "path": ["contacts"]
+            },
+            "description": "Route du module 02 — apparaîtra dans la recherche globale et dans l'export contacts."
+          }
+        },
+        {
+          "name": "2 · Créer un produit",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const json = pm.response.json();",
+                  "if (json && json.success && json.data && json.data.id) {",
+                  "    pm.collectionVariables.set('productId', json.data.id);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Écran Dell 27\\\" QHD\",\n  \"type\": \"PRODUCT\",\n  \"unit\": \"UNIT\",\n  \"unitPrice\": 349.90\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/products",
+              "host": ["{{baseUrl}}"],
+              "path": ["products"]
+            },
+            "description": "Route du module 03."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Recherche globale",
+      "item": [
+        {
+          "name": "1 · Rechercher \"ACME\" (tous types)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const json = pm.response.json();",
+                  "pm.test('OK (200)', () => pm.response.to.have.status(200));",
+                  "if (json && json.success && json.data) {",
+                  "    console.log('Total : ' + json.data.total + ' résultat(s) pour \"' + json.data.query + '\"');",
+                  "    if (json.data.results.CONTACT) {",
+                  "        console.log('Contact trouvé : ' + json.data.results.CONTACT[0].label + ' (' + json.data.results.CONTACT[0].subtitle + ')');",
+                  "    }",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/search?q=ACME",
+              "host": ["{{baseUrl}}"],
+              "path": ["search"],
+              "query": [
+                {
+                  "key": "q",
+                  "value": "ACME"
+                }
+              ]
+            },
+            "description": "**Accès : tout connecté.** Cherche dans contacts/produits/commandes/factures en parallèle, 5 résultats max par type. Attendu : le client ACME Industries apparaît sous `results.CONTACT`."
+          }
+        },
+        {
+          "name": "2 · Rechercher un produit, type filtré",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/search?q=ecran&types=PRODUCT",
+              "host": ["{{baseUrl}}"],
+              "path": ["search"],
+              "query": [
+                {
+                  "key": "q",
+                  "value": "ecran"
+                },
+                {
+                  "key": "types",
+                  "value": "PRODUCT",
+                  "description": "CONTACT | PRODUCT | ORDER | INVOICE — répétable pour plusieurs types"
+                }
+              ]
+            },
+            "description": "`types` filtre les catégories cherchées : seul `results.PRODUCT` sera renseigné, même si des contacts matchaient \"ecran\"."
+          }
+        },
+        {
+          "name": "3 · 400 — q trop court (1 caractère)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/search?q=A",
+              "host": ["{{baseUrl}}"],
+              "path": ["search"],
+              "query": [
+                {
+                  "key": "q",
+                  "value": "A"
+                }
+              ]
+            },
+            "description": "Attendu **400 `VALIDATION_ERROR`** : `q` doit contenir au moins 2 caractères (validé par le DTO, avant tout appel aux repositories)."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Exports",
+      "item": [
+        {
+          "name": "1 · Contacts — CSV",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/contacts/export?format=csv",
+              "host": ["{{baseUrl}}"],
+              "path": ["contacts", "export"],
+              "query": [
+                {
+                  "key": "format",
+                  "value": "csv"
+                },
+                {
+                  "key": "type",
+                  "value": "CUSTOMER",
+                  "disabled": true
+                },
+                {
+                  "key": "search",
+                  "value": "ACME",
+                  "disabled": true
+                }
+              ]
+            },
+            "description": "**Accès : ADMIN, MANAGER.** Réponse BINAIRE (pas d'enveloppe JSON) : `Content-Type: text/csv`, `Content-Disposition: attachment; filename=\"contacts-YYYY-MM-DD.csv\"`. Dans Postman, clique « Save Response » → « Save to a file » pour l'ouvrir. Le fichier commence par un BOM UTF-8 (accents lisibles dans Excel)."
+          }
+        },
+        {
+          "name": "2 · Contacts — XLSX",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/contacts/export?format=xlsx",
+              "host": ["{{baseUrl}}"],
+              "path": ["contacts", "export"],
+              "query": [
+                {
+                  "key": "format",
+                  "value": "xlsx"
+                }
+              ]
+            },
+            "description": "Même export, format Excel natif (`application/vnd.openxmlformats-officedocument.spreadsheetml.sheet`)."
+          }
+        },
+        {
+          "name": "3 · Produits — CSV (catégorie résolue par nom)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/products/export?format=csv",
+              "host": ["{{baseUrl}}"],
+              "path": ["products", "export"],
+              "query": [
+                {
+                  "key": "format",
+                  "value": "csv"
+                }
+              ]
+            },
+            "description": "**Accès : ADMIN, MANAGER.** La colonne « Catégorie » affiche le NOM (pas l'UUID) : toutes les catégories sont chargées une fois, résolues via une Map — pas de requête par ligne."
+          }
+        },
+        {
+          "name": "4 · Commandes — CSV",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/orders/export?format=csv",
+              "host": ["{{baseUrl}}"],
+              "path": ["orders", "export"],
+              "query": [
+                {
+                  "key": "format",
+                  "value": "csv"
+                },
+                {
+                  "key": "type",
+                  "value": "CUSTOMER",
+                  "disabled": true
+                },
+                {
+                  "key": "status",
+                  "value": "DELIVERED",
+                  "disabled": true
+                },
+                {
+                  "key": "from",
+                  "value": "2026-01-01",
+                  "disabled": true
+                },
+                {
+                  "key": "to",
+                  "value": "2026-12-31",
+                  "disabled": true
+                }
+              ]
+            },
+            "description": "**Accès : ADMIN, MANAGER.** Route du module 06. Nécessite au moins une commande existante pour un fichier non vide (voir la collection du module 06)."
+          }
+        },
+        {
+          "name": "5 · Factures & avoirs — CSV",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/invoices/export?format=csv",
+              "host": ["{{baseUrl}}"],
+              "path": ["invoices", "export"],
+              "query": [
+                {
+                  "key": "format",
+                  "value": "csv"
+                },
+                {
+                  "key": "type",
+                  "value": "CREDIT_NOTE",
+                  "disabled": true
+                }
+              ]
+            },
+            "description": "**Accès : ADMIN, MANAGER.** Route du module 07. Colonne « Reste à payer » = `remainingAmount()`, calculé à la volée."
+          }
+        },
+        {
+          "name": "6 · Paiements — CSV (facture/client dédupliqués)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/payments/export?format=csv",
+              "host": ["{{baseUrl}}"],
+              "path": ["payments", "export"],
+              "query": [
+                {
+                  "key": "format",
+                  "value": "csv"
+                },
+                {
+                  "key": "method",
+                  "value": "BANK_TRANSFER",
+                  "disabled": true
+                }
+              ]
+            },
+            "description": "**Accès : ADMIN, MANAGER.** Route du module 08. Les colonnes Facture/Client sont résolues par facture DISTINCTE (dédupliquée), pas par ligne de paiement."
+          }
+        },
+        {
+          "name": "7 · 400 — format manquant",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/products/export",
+              "host": ["{{baseUrl}}"],
+              "path": ["products", "export"]
+            },
+            "description": "Attendu **400 `VALIDATION_ERROR`** : `format` est obligatoire (`csv` ou `xlsx`) — le DTO refuse avant toute lecture."
+          }
+        },
+        {
+          "name": "8 · 403 — export en dehors de ADMIN/MANAGER",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/contacts/export?format=csv",
+              "host": ["{{baseUrl}}"],
+              "path": ["contacts", "export"],
+              "query": [
+                {
+                  "key": "format",
+                  "value": "csv"
+                }
+              ]
+            },
+            "description": "À rejouer avec le token d'un compte EMPLOYEE (login différent) : attendu **403 `ACCESS_DENIED`**. Avec le token admin par défaut de cette collection, la requête réussit normalement (200) — c'est le comportement à comparer."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Audit & Historique",
+      "item": [
+        {
+          "name": "1 · Journal complet (ADMIN)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const json = pm.response.json();",
+                  "pm.test('OK (200)', () => pm.response.to.have.status(200));",
+                  "if (json && json.success && json.data) {",
+                  "    console.log(json.data.items.length + ' événement(s) — total : ' + json.data.meta.pagination.totalItems);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/audit-logs?limit=20",
+              "host": ["{{baseUrl}}"],
+              "path": ["audit-logs"],
+              "query": [
+                {
+                  "key": "limit",
+                  "value": "20"
+                },
+                {
+                  "key": "category",
+                  "value": "SECURITY",
+                  "description": "TECHNICAL | BUSINESS | SECURITY | AUDIT",
+                  "disabled": true
+                },
+                {
+                  "key": "action",
+                  "value": "auth.login.success",
+                  "disabled": true
+                },
+                {
+                  "key": "resourceType",
+                  "value": "invoice",
+                  "disabled": true
+                },
+                {
+                  "key": "resourceId",
+                  "value": "",
+                  "disabled": true
+                },
+                {
+                  "key": "actorUserId",
+                  "value": "",
+                  "disabled": true
+                },
+                {
+                  "key": "from",
+                  "value": "2026-01-01",
+                  "disabled": true
+                },
+                {
+                  "key": "to",
+                  "value": "2026-12-31",
+                  "disabled": true
+                }
+              ]
+            },
+            "description": "**Accès : ADMIN uniquement.** Attendu : au moins l'événement `auth.login.success` de la connexion initiale (catégorie SECURITY) — c'est aujourd'hui le SEUL type d'événement réellement enregistré (voir la description de la collection)."
+          }
+        },
+        {
+          "name": "2 · Filtrer par catégorie SECURITY",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/audit-logs?category=SECURITY",
+              "host": ["{{baseUrl}}"],
+              "path": ["audit-logs"],
+              "query": [
+                {
+                  "key": "category",
+                  "value": "SECURITY"
+                }
+              ]
+            },
+            "description": "Les connexions/déconnexions/révocations de session (module authentication, socle) sont catégorisées SECURITY."
+          }
+        },
+        {
+          "name": "3 · Historique d'un contact (vide, attendu)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/contacts/{{customerId}}/history",
+              "host": ["{{baseUrl}}"],
+              "path": ["contacts", "{{customerId}}", "history"]
+            },
+            "description": "**Accès : ADMIN, MANAGER.** Alias de `GET /audit-logs?resourceType=contact&resourceId={{customerId}}`.\n\n**Réponse attendue : `items: []`.** Ce n'est PAS une erreur — `ContactsModule` n'appelle pas encore `AuditService.log()` (dette différée depuis le module 02, § 0.1 du guide). L'endpoint fonctionne ; c'est l'ÉCRITURE qui manque encore, pas la lecture."
+          }
+        },
+        {
+          "name": "4 · Historique d'une commande (tout connecté)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/orders/00000000-0000-0000-0000-000000000000/history",
+              "host": ["{{baseUrl}}"],
+              "path": ["orders", "00000000-0000-0000-0000-000000000000", "history"]
+            },
+            "description": "Remplace l'UUID par une vraie commande (module 06) si tu veux un 200 avec `items: []` plutôt qu'un test sur un id fictif. Contrairement aux contacts/produits/paiements, cette route est ouverte à TOUT utilisateur connecté (pas de `@Roles`)."
+          }
+        },
+        {
+          "name": "5 · 403 — audit-logs hors ADMIN",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/audit-logs",
+              "host": ["{{baseUrl}}"],
+              "path": ["audit-logs"]
+            },
+            "description": "À rejouer avec un token MANAGER (login différent) : attendu **403 `ACCESS_DENIED`** — `GET /audit-logs` est réservé ADMIN (contrairement aux `/*/history` par ressource, ouverts plus largement selon le module)."
+          }
+        }
+      ]
+    }
+  ]
+}

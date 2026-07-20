@@ -1,0 +1,553 @@
+{
+  "info": {
+    "name": "ERP — 05 · Devis",
+    "description": "Collection du module 05 (guide mini-DEV-05).\n\n**Avant de commencer** :\n1. Renseigne la variable de collection `adminPassword` (onglet Variables).\n2. Lance « Auth / Login (admin) ».\n3. Déroule « Prérequis » (client + produit via les modules 02 et 03), puis le dossier Devis DANS L'ORDRE : le parcours suit le cycle de vie complet (création → modification → envoi → acceptation), et un brouillon jetable sert à démontrer la suppression.\n\nCycle de vie : `DRAFT → SENT → ACCEPTED | REJECTED | EXPIRED`. Modification et suppression : DRAFT uniquement.\n\nEnveloppe de réponse : `{ success, data, meta }` — succès ; `{ success, error: { code, message }, meta }` — erreur.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{accessToken}}",
+        "type": "string"
+      }
+    ]
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:3000/api/v1",
+      "type": "string"
+    },
+    {
+      "key": "adminPassword",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "accessToken",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "customerId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "supplierId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "productId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "quoteId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "draftQuoteId",
+      "value": "",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "Auth",
+      "item": [
+        {
+          "name": "Login (admin)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const json = pm.response.json();",
+                  "if (json && json.success && json.data && json.data.accessToken) {",
+                  "    pm.collectionVariables.set('accessToken', json.data.accessToken);",
+                  "    console.log('accessToken enregistré dans les variables de collection.');",
+                  "}",
+                  "pm.test('Login réussi (200)', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"admin@local.dev\",\n  \"password\": \"{{adminPassword}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/auth/login",
+              "host": ["{{baseUrl}}"],
+              "path": ["auth", "login"]
+            },
+            "description": "Connexion. Le token d'accès (`data.accessToken`) est stocké automatiquement dans la variable `accessToken`."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Prérequis (modules 02 & 03)",
+      "item": [
+        {
+          "name": "Créer un client",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const json = pm.response.json();",
+                  "if (json && json.success && json.data && json.data.id) {",
+                  "    pm.collectionVariables.set('customerId', json.data.id);",
+                  "    console.log('customerId = ' + json.data.id);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"type\": \"CUSTOMER\",\n  \"companyName\": \"ACME Industries\",\n  \"email\": \"contact@acme-industries.fr\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/contacts",
+              "host": ["{{baseUrl}}"],
+              "path": ["contacts"]
+            },
+            "description": "Route du module 02. Un devis exige un contact de type CUSTOMER ou BOTH ; id mémorisé dans `customerId`."
+          }
+        },
+        {
+          "name": "Créer un fournisseur (pour le scénario d'erreur)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const json = pm.response.json();",
+                  "if (json && json.success && json.data && json.data.id) {",
+                  "    pm.collectionVariables.set('supplierId', json.data.id);",
+                  "    console.log('supplierId = ' + json.data.id);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"type\": \"SUPPLIER\",\n  \"companyName\": \"Grossiste Écrans SARL\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/contacts",
+              "host": ["{{baseUrl}}"],
+              "path": ["contacts"]
+            },
+            "description": "Route du module 02. Sert à démontrer le 409 « un fournisseur ne reçoit pas de devis » ; id mémorisé dans `supplierId`."
+          }
+        },
+        {
+          "name": "Créer un produit",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const json = pm.response.json();",
+                  "if (json && json.success && json.data && json.data.id) {",
+                  "    pm.collectionVariables.set('productId', json.data.id);",
+                  "    console.log('productId = ' + json.data.id + ' — SKU : ' + json.data.sku);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Écran Dell 27\\\" QHD\",\n  \"type\": \"PRODUCT\",\n  \"unit\": \"UNIT\",\n  \"unitPrice\": 349.90,\n  \"purchasePrice\": 220\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/products",
+              "host": ["{{baseUrl}}"],
+              "path": ["products"]
+            },
+            "description": "Route du module 03. La ligne de devis copiera son nom, son prix et sa TVA ; id mémorisé dans `productId`."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Devis",
+      "item": [
+        {
+          "name": "1 · Créer un devis (ligne produit + ligne libre)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const json = pm.response.json();",
+                  "if (json && json.success && json.data && json.data.id) {",
+                  "    pm.collectionVariables.set('quoteId', json.data.id);",
+                  "    console.log('quoteId = ' + json.data.id + ' — numéro : ' + json.data.number + ' — totalTTC : ' + json.data.totalTTC);",
+                  "}",
+                  "pm.test('Créé (201)', () => pm.response.to.have.status(201));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"customerId\": \"{{customerId}}\",\n  \"notes\": \"Remise fidélité sur les écrans.\",\n  \"lines\": [\n    {\n      \"productId\": \"{{productId}}\",\n      \"quantity\": 2,\n      \"discountPercent\": 10\n    },\n    {\n      \"description\": \"Installation et câblage\",\n      \"quantity\": 2.5,\n      \"unitPrice\": 85\n    }\n  ]\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/quotes",
+              "host": ["{{baseUrl}}"],
+              "path": ["quotes"]
+            },
+            "description": "**Accès : tout utilisateur connecté.** Deux lignes : une ligne PRODUIT (description/prix/TVA copiés du catalogue, remise 10 %) et une ligne LIBRE (2.5 h d'installation).\n\nAttendu : numéro `DEV-YYYY-0001`, statut `DRAFT`, `totalHT` = 842.32 (2×349.90×0.9 + 2.5×85), `totalTTC` = 1010.78 — calculés côté serveur, au centime près."
+          }
+        },
+        {
+          "name": "2 · Lister les devis",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/quotes?page=1&limit=20",
+              "host": ["{{baseUrl}}"],
+              "path": ["quotes"],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "limit",
+                  "value": "20"
+                },
+                {
+                  "key": "status",
+                  "value": "DRAFT",
+                  "description": "DRAFT | SENT | ACCEPTED | REJECTED | EXPIRED",
+                  "disabled": true
+                },
+                {
+                  "key": "customerId",
+                  "value": "{{customerId}}",
+                  "disabled": true
+                },
+                {
+                  "key": "from",
+                  "value": "2026-01-01",
+                  "description": "Créés à partir du (ISO 8601)",
+                  "disabled": true
+                },
+                {
+                  "key": "to",
+                  "value": "2026-12-31",
+                  "disabled": true
+                },
+                {
+                  "key": "search",
+                  "value": "DEV-2026",
+                  "description": "Recherche sur numéro et nom du client",
+                  "disabled": true
+                },
+                {
+                  "key": "sortBy",
+                  "value": "totalTTC",
+                  "description": "number | status | validUntil | totalTTC | customerName | createdAt",
+                  "disabled": true
+                }
+              ]
+            },
+            "description": "**Accès : tout utilisateur connecté.** Liste paginée avec le nom du client — SANS les lignes (le détail les charge)."
+          }
+        },
+        {
+          "name": "3 · Détail d'un devis (avec lignes)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/quotes/{{quoteId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["quotes", "{{quoteId}}"]
+            },
+            "description": "**Accès : tout utilisateur connecté.** Lignes triées dans l'ordre de saisie, avec leurs sous-totaux figés."
+          }
+        },
+        {
+          "name": "4 · Modifier le brouillon (remplace les lignes)",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"notes\": \"Offre revue à la baisse.\",\n  \"lines\": [\n    {\n      \"productId\": \"{{productId}}\",\n      \"quantity\": 1\n    }\n  ]\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/quotes/{{quoteId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["quotes", "{{quoteId}}"]
+            },
+            "description": "**Accès : ADMIN, MANAGER.** DRAFT uniquement (409 sinon). `lines` fourni = remplacement COMPLET des lignes + recalcul des totaux."
+          }
+        },
+        {
+          "name": "5 · Envoyer (DRAFT → SENT)",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/quotes/{{quoteId}}/send",
+              "host": ["{{baseUrl}}"],
+              "path": ["quotes", "{{quoteId}}", "send"]
+            },
+            "description": "**Accès : ADMIN, MANAGER.** Transition de statut (200, pas 201 : rien n'est créé). Version mini : pas encore de PDF ni d'e-mail — ils arrivent au niveau min-. Après cet appel, le devis n'est PLUS modifiable."
+          }
+        },
+        {
+          "name": "6 · Accepter (SENT → ACCEPTED)",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/quotes/{{quoteId}}/accept",
+              "host": ["{{baseUrl}}"],
+              "path": ["quotes", "{{quoteId}}", "accept"]
+            },
+            "description": "**Accès : ADMIN, MANAGER.** Le client a dit oui. État final (la conversion en commande arrive avec le module 06)."
+          }
+        },
+        {
+          "name": "6bis · Refuser (SENT → REJECTED)",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/quotes/{{quoteId}}/reject",
+              "host": ["{{baseUrl}}"],
+              "path": ["quotes", "{{quoteId}}", "reject"]
+            },
+            "description": "**Accès : ADMIN, MANAGER.** Alternative au 6 (un devis SENT est soit accepté, soit refusé, soit expiré). Si tu as déjà accepté, cet appel renvoie 409 — c'est la machine à états qui fait son travail."
+          }
+        },
+        {
+          "name": "7 · Créer un brouillon jetable",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const json = pm.response.json();",
+                  "if (json && json.success && json.data && json.data.id) {",
+                  "    pm.collectionVariables.set('draftQuoteId', json.data.id);",
+                  "    console.log('draftQuoteId = ' + json.data.id + ' — numéro : ' + json.data.number);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"customerId\": \"{{customerId}}\",\n  \"lines\": [\n    {\n      \"description\": \"Audit réseau\",\n      \"quantity\": 1,\n      \"unitPrice\": 450\n    }\n  ]\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/quotes",
+              "host": ["{{baseUrl}}"],
+              "path": ["quotes"]
+            },
+            "description": "Regarde son numéro : la séquence a continué (DEV-YYYY-0002). Ce brouillon sert à démontrer la suppression."
+          }
+        },
+        {
+          "name": "8 · Supprimer le brouillon (DRAFT uniquement)",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/quotes/{{draftQuoteId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["quotes", "{{draftQuoteId}}"]
+            },
+            "description": "**Accès : ADMIN.** 204 sans body. Suppression PHYSIQUE (un brouillon n'engage personne) ; les lignes suivent via ON DELETE CASCADE. Sur un devis envoyé/accepté : 409."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Scénarios d'erreur (démo)",
+      "item": [
+        {
+          "name": "409 — un fournisseur ne reçoit pas de devis",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"customerId\": \"{{supplierId}}\",\n  \"lines\": [\n    {\n      \"description\": \"Test\",\n      \"quantity\": 1,\n      \"unitPrice\": 10\n    }\n  ]\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/quotes",
+              "host": ["{{baseUrl}}"],
+              "path": ["quotes"]
+            },
+            "description": "Attendu **409 `BUSINESS_RULE_VIOLATION`** : le contact doit être de type CUSTOMER ou BOTH."
+          }
+        },
+        {
+          "name": "409 — modifier un devis envoyé",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"notes\": \"Trop tard : le devis est parti chez le client.\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/quotes/{{quoteId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["quotes", "{{quoteId}}"]
+            },
+            "description": "À lancer APRÈS l'étape 5 (envoi) : attendu **409 `BUSINESS_RULE_VIOLATION`** — seul un brouillon est modifiable, et le message donne le statut actuel."
+          }
+        },
+        {
+          "name": "409 — accepter un brouillon (transition invalide)",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/quotes/{{draftQuoteId}}/accept",
+              "host": ["{{baseUrl}}"],
+              "path": ["quotes", "{{draftQuoteId}}", "accept"]
+            },
+            "description": "À lancer sur un devis encore DRAFT (étape 7, avant suppression) : attendu **409** — un devis doit être ENVOYÉ avant d'être accepté."
+          }
+        },
+        {
+          "name": "400 — devis sans lignes",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"customerId\": \"{{customerId}}\",\n  \"lines\": []\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/quotes",
+              "host": ["{{baseUrl}}"],
+              "path": ["quotes"]
+            },
+            "description": "Attendu **400 `VALIDATION_ERROR`** : un devis doit contenir au moins une ligne (ArrayMinSize)."
+          }
+        },
+        {
+          "name": "409 — ligne libre incomplète",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"customerId\": \"{{customerId}}\",\n  \"lines\": [\n    {\n      \"quantity\": 1\n    }\n  ]\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/quotes",
+              "host": ["{{baseUrl}}"],
+              "path": ["quotes"]
+            },
+            "description": "Ligne sans productId NI description/prix : attendu **409 `BUSINESS_RULE_VIOLATION`** — une ligne libre doit préciser sa description et son prix unitaire."
+          }
+        }
+      ]
+    }
+  ]
+}

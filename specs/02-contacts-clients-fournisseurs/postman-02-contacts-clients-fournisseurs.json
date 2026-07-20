@@ -1,0 +1,290 @@
+{
+  "info": {
+    "name": "ERP — 02 · Contacts (Clients & Fournisseurs)",
+    "description": "Collection du module 02 (guide mini-DEV-02).\n\n**Avant de commencer** :\n1. Renseigne la variable de collection `adminPassword` (onglet Variables).\n2. Lance « Auth / Login (admin) » : le token est enregistré automatiquement dans `accessToken`.\n3. « Créer un contact » mémorise l'id créé dans `createdContactId`, réutilisé par Détail, Modifier et Désactiver.\n\nTypes de contact : `CUSTOMER` (client), `SUPPLIER` (fournisseur), `BOTH` (les deux).\n\nEnveloppe de réponse : `{ success, data, meta }` — succès ; `{ success, error: { code, message }, meta }` — erreur.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{accessToken}}",
+        "type": "string"
+      }
+    ]
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:3000/api/v1",
+      "type": "string"
+    },
+    {
+      "key": "adminPassword",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "accessToken",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "createdContactId",
+      "value": "",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "Auth",
+      "item": [
+        {
+          "name": "Login (admin)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const json = pm.response.json();",
+                  "if (json && json.success && json.data && json.data.accessToken) {",
+                  "    pm.collectionVariables.set('accessToken', json.data.accessToken);",
+                  "    console.log('accessToken enregistré dans les variables de collection.');",
+                  "}",
+                  "pm.test('Login réussi (200)', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"admin@local.dev\",\n  \"password\": \"{{adminPassword}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/auth/login",
+              "host": ["{{baseUrl}}"],
+              "path": ["auth", "login"]
+            },
+            "description": "Connexion. Le token d'accès (`data.accessToken`) est stocké automatiquement dans la variable `accessToken`."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Contacts",
+      "item": [
+        {
+          "name": "Lister les contacts",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/contacts?page=1&limit=20",
+              "host": ["{{baseUrl}}"],
+              "path": ["contacts"],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "limit",
+                  "value": "20"
+                },
+                {
+                  "key": "type",
+                  "value": "CUSTOMER",
+                  "description": "CUSTOMER | SUPPLIER | BOTH",
+                  "disabled": true
+                },
+                {
+                  "key": "isActive",
+                  "value": "true",
+                  "disabled": true
+                },
+                {
+                  "key": "search",
+                  "value": "acme",
+                  "description": "Recherche sur nom société / e-mail / nom du contact",
+                  "disabled": true
+                },
+                {
+                  "key": "sortBy",
+                  "value": "companyName",
+                  "disabled": true
+                },
+                {
+                  "key": "sortDirection",
+                  "value": "ASC",
+                  "disabled": true
+                }
+              ]
+            },
+            "description": "**Accès : tout utilisateur connecté.** Liste paginée. Active les paramètres désactivés pour tester les filtres. Pagination dans `meta.pagination`."
+          }
+        },
+        {
+          "name": "Créer un contact",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const json = pm.response.json();",
+                  "if (json && json.success && json.data && json.data.id) {",
+                  "    pm.collectionVariables.set('createdContactId', json.data.id);",
+                  "    console.log('createdContactId = ' + json.data.id);",
+                  "}",
+                  "pm.test('Créé (201)', () => pm.response.to.have.status(201));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"type\": \"CUSTOMER\",\n  \"companyName\": \"ACME Industries\",\n  \"contactName\": \"Jeanne Martin\",\n  \"email\": \"contact@acme-industries.fr\",\n  \"phone\": \"+33 1 23 45 67 89\",\n  \"street\": \"42 avenue des Champs\",\n  \"city\": \"Paris\",\n  \"postalCode\": \"75008\",\n  \"siret\": \"12345678901234\",\n  \"vatNumber\": \"FR12345678901\",\n  \"notes\": \"Client créé depuis Postman.\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/contacts",
+              "host": ["{{baseUrl}}"],
+              "path": ["contacts"]
+            },
+            "description": "**Accès : ADMIN, MANAGER.** Seuls `type` et `companyName` sont obligatoires. Le SIRET, s'il est fourni, doit faire exactement 14 chiffres. L'id créé est mémorisé dans `createdContactId`."
+          }
+        },
+        {
+          "name": "Détail d'un contact",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/contacts/{{createdContactId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["contacts", "{{createdContactId}}"]
+            },
+            "description": "**Accès : tout utilisateur connecté.** 404 si inconnu ou désactivé."
+          }
+        },
+        {
+          "name": "Modifier un contact",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"type\": \"BOTH\",\n  \"phone\": \"+33 1 98 76 54 32\",\n  \"notes\": \"Devient aussi fournisseur à partir de juillet 2026.\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/contacts/{{createdContactId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["contacts", "{{createdContactId}}"]
+            },
+            "description": "**Accès : ADMIN, MANAGER.** Sémantique PATCH : seuls les champs envoyés sont modifiés. `isActive: true` permet de réactiver un contact."
+          }
+        },
+        {
+          "name": "Désactiver un contact",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/contacts/{{createdContactId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["contacts", "{{createdContactId}}"]
+            },
+            "description": "**Accès : ADMIN.** Suppression logique (soft-delete). Réponse : 204 sans body."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Scénarios d'erreur (démo)",
+      "item": [
+        {
+          "name": "400 — SIRET invalide",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"type\": \"SUPPLIER\",\n  \"companyName\": \"Fournisseur Test\",\n  \"siret\": \"123\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/contacts",
+              "host": ["{{baseUrl}}"],
+              "path": ["contacts"]
+            },
+            "description": "Attendu **400 `VALIDATION_ERROR`** : le SIRET doit faire exactement 14 chiffres."
+          }
+        },
+        {
+          "name": "400 — type de contact inconnu",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"type\": \"PROSPECT\",\n  \"companyName\": \"Test Enum\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/contacts",
+              "host": ["{{baseUrl}}"],
+              "path": ["contacts"]
+            },
+            "description": "Attendu **400 `VALIDATION_ERROR`** : le type doit valoir CUSTOMER, SUPPLIER ou BOTH."
+          }
+        },
+        {
+          "name": "404 — contact inconnu",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/contacts/00000000-0000-0000-0000-000000000000",
+              "host": ["{{baseUrl}}"],
+              "path": ["contacts", "00000000-0000-0000-0000-000000000000"]
+            },
+            "description": "Attendu **404 `RESOURCE_NOT_FOUND`** : UUID valide mais inexistant."
+          }
+        }
+      ]
+    }
+  ]
+}
