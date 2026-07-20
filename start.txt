@@ -1,0 +1,22 @@
+Démarrage au quotidien 
+La base est déjà créée, migrée et seedée — il ne faut que 2 commandes :
+
+# 1. Démarrer SQL Server (si Docker Desktop tourne déjà)
+npm run docker:db:up
+
+# 2. Lancer l'API en mode watch
+npm run start:dev
+L'API répond sur http://localhost:3000/api/v1, Swagger sur http://localhost:3000/api/docs. Pour arrêter : Ctrl+C dans le terminal, et éventuellement npm run docker:db:down si tu veux aussi éteindre la base (pas obligatoire, tu peux la laisser tourner).
+
+Astuce : si le conteneur tourne déjà (il est en restart: unless-stopped, donc il redémarre souvent tout seul avec Docker Desktop), le docker:db:up ne fait rien de méchant — il dit juste que le conteneur est déjà up. Tu peux vérifier avec npm run docker:db:status.
+
+Installation complète 
+Pour référence, la séquence complète du README.md :
+
+npm ci                          # 1. Dépendances
+copy .env.example .env.local    # 2. Config (renseigner DB_PASSWORD, secrets JWT ≥ 32 car.)
+npm run docker:db:up            # 3. SQL Server dans Docker
+npm run db:init                 # 4. Création des bases locale + test (idempotent)
+npm run migration:run           # 5. Migrations
+npm run seed                    # 6. Utilisateurs de démo (mots de passe affichés en console)
+npm run start:dev               # 7. Lancer l'API

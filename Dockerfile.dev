@@ -1,0 +1,25 @@
+# =============================================================================
+# Dockerfile.dev — image de développement de l'application NestJS
+#
+# ATTENTION : ce fichier est fourni à titre de RÉFÉRENCE pour une éventuelle
+# utilisation future (environnement de développement partagé, CI...).
+#
+# Il n'est PAS utilisé par le docker-compose.yml local : la règle du socle
+# est d'exécuter NestJS directement sur la machine du développeur et de ne
+# conteneuriser que SQL Server.
+# =============================================================================
+
+FROM node:24-alpine
+
+WORKDIR /usr/src/app
+
+# Installation des dépendances en couche séparée pour profiter du cache Docker
+COPY package.json package-lock.json ./
+RUN npm ci
+
+COPY . .
+
+EXPOSE 3000
+
+# Mode watch : adapté uniquement au développement
+CMD ["npm", "run", "start:dev"]

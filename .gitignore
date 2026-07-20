@@ -1,0 +1,45 @@
+# Dépendances
+node_modules/
+
+# Build
+dist/
+build/
+
+# Couverture de tests
+coverage/
+.nyc_output/
+
+# Environnements — seuls les fichiers *.example sont versionnés
+.env
+.env.local
+.env.development
+.env.test
+.env.*.local
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+
+# Fichiers téléversés et stockage local
+uploads/
+storage/
+
+# Fichiers temporaires
+tmp/
+temp/
+*.tmp
+
+# Données SQL Server (volumes locaux éventuels)
+mssql-data/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Système d'exploitation
+.DS_Store
+Thumbs.db
+desktop.ini
