@@ -23,7 +23,6 @@ npm-debug.log*
 
 # Fichiers téléversés et stockage local
 uploads/
-storage/
 
 # Fichiers temporaires
 tmp/
